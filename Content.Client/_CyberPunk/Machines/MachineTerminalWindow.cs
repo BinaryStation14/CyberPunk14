@@ -52,6 +52,14 @@ public sealed class MachineTerminalWindow : DefaultWindow
     }
 
     /// <summary>
+    /// Names the window as its programs ask, or gives it back its own name.
+    /// </summary>
+    public void SetProgramTitle(string? title)
+    {
+        Title = string.IsNullOrWhiteSpace(title) ? Loc.GetString("machine-terminal-title") : title;
+    }
+
+    /// <summary>
     /// Shows the program's new UI, switching to it when there wasn't one, and back to the screen when it's gone.
     /// </summary>
     public void SetUi(ProgramUiNode? root)

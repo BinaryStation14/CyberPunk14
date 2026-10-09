@@ -6,7 +6,7 @@ namespace Content.Client._CyberPunk.Machines;
 
 /// <summary>
 /// Opens a machine's terminal. It asks the server for the whole screen when it opens, and the server sends each
-/// new piece of output after that, and the program's UI whenever it changes, so everyone at the machine sees the
+/// new piece of output after that, and the program's UI and window title whenever they change, so everyone at the machine sees the
 /// same thing.
 /// </summary>
 [UsedImplicitly]
@@ -48,6 +48,9 @@ public sealed class MachineTerminalBoundUserInterface : BoundUserInterface
                 break;
             case MachineTerminalUiMessage ui:
                 _window.SetUi(ui.Root);
+                break;
+            case MachineTerminalTitleMessage title:
+                _window.SetProgramTitle(title.Title);
                 break;
         }
     }

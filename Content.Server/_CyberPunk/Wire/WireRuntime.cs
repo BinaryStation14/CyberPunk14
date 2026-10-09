@@ -88,6 +88,7 @@ internal static partial class WireRuntime
   (import "sb_v8" "term_raw" (func $term_raw (param i32)))
   (import "sb_v8" "term_key" (func $term_key (result i32)))
   (import "sb_v8" "term_clear" (func $term_clear))
+  (import "sb_v9" "term_title" (func $term_title (param i32 i32) (result i32)))
   (import "sb_v8" "exit" (func $exit (param i32)))
   (import "sb_v8" "reboot" (func $reboot))
   (import "sb_v8" "ui_set" (func $ui_set (param i32 i32 i32 i32) (result i32)))
@@ -1979,6 +1980,10 @@ internal static partial class WireRuntime
     (call $only (i32.const 0) (str "term.clear"))
     (call $term_clear)
     (ref.null none))
+  (func $term.title (param $v eqref) (result eqref)
+    (call $only (i32.const 0) (str "term.title"))
+    (call $bool (i32.eqz (call $term_title (i32.const 1024)
+      (i32.sub (call $put (call $text_arg (local.get $v) (str "the title")) (i32.const 1024)) (i32.const 1024))))))
 
   ;; ---- door
 

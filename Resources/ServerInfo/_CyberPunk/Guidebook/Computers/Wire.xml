@@ -29,7 +29,7 @@
   What a program can reach on its machine is in modules, called like [mono]fs.read("notes.txt")[/mono]:
   - [bold]sys[/bold]: the program itself: its arguments, the clock, random numbers, starting and stopping other programs, building programs, and the manual.
   - [bold]fs[/bold]: files on the disk.
-  - [bold]term[/bold]: the terminal: reading lines, raw key presses for full-screen programs, and clearing the screen.
+  - [bold]term[/bold]: the terminal: reading lines, raw key presses for full-screen programs, clearing the screen, and naming the window ([mono]term.title("Mail")[/mono]).
   - [bold]net[/bold]: sending and receiving packets, addresses and hostnames.
   - [bold]ui[/bold]: a window of buttons, lists and drawings in place of the text. See [textlink="Program UIs" link="ProgramUis"].
 

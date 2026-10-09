@@ -57,3 +57,17 @@ public sealed class MachineTerminalKeysMessage : BoundUserInterfaceMessage
         Keys = keys;
     }
 }
+
+/// <summary>
+/// The title a machine's programs give its terminal window, or null for the window's own.
+/// </summary>
+[Serializable, NetSerializable]
+public sealed class MachineTerminalTitleMessage : BoundUserInterfaceMessage
+{
+    public readonly string? Title;
+
+    public MachineTerminalTitleMessage(string? title)
+    {
+        Title = title;
+    }
+}

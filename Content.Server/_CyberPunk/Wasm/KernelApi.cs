@@ -25,6 +25,11 @@ namespace Content.Server._CyberPunk.Wasm;
 /// </remarks>
 internal sealed class KernelApi
 {
+    /// <summary>
+    /// The longest title a program can give the terminal window, in characters.
+    /// </summary>
+    public const int MaxTitle = 64;
+
     private readonly Linker _linker;
     private readonly HashSet<string> _linked = new();
 
@@ -488,6 +493,27 @@ internal sealed class KernelApi
             var io = Io(c);
             if (io.Is(DeviceKind.Computer) && io.Job == 0)
                 io.UiChange = (null, "");
+        });
+
+        Def("term_title", (c, ptr, len) =>
+        {
+            var io = Io(c);
+            if (!io.Is(DeviceKind.Computer) || io.Job != 0)
+                return -1;
+
+            // Only what fits on a window's title bar, with no control characters.
+            var title = new StringBuilder();
+            foreach (var ch in ReadText(c, ptr, Math.Min(len, MaxTitle * 4)))
+            {
+                if (title.Length == MaxTitle)
+                    break;
+
+                if (!char.IsControl(ch))
+                    title.Append(ch);
+            }
+
+            io.TitleChange = title.ToString().Trim();
+            return 0;
         });
     }
 

@@ -326,6 +326,27 @@ public sealed class Vm : IDisposable
     public ProgramUiNode? Ui => State == VmState.Running && _procs.Count > 0 ? _procs[^1].Ui : null;
 
     /// <summary>
+    /// The terminal window's title: the one the front program gave it, or else the one the program under it
+    /// gave, and so on down to the OS. Null if none of them has given one.
+    /// </summary>
+    public string? Title
+    {
+        get
+        {
+            if (State != VmState.Running)
+                return null;
+
+            for (var i = _procs.Count - 1; i >= 0; i--)
+            {
+                if (_procs[i].Title is { } title)
+                    return title;
+            }
+
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Someone used a widget of the front program's UI. It's checked against the UI (an id it doesn't have, or
     /// a value the widget can't send, is dropped) and queued for the program's <c>ui_event</c>.
     /// </summary>
@@ -732,6 +753,7 @@ public sealed class Vm : IDisposable
         _io.Args = process.Args;
         _io.UiText = process.UiText;
         _io.UiChange = null;
+        _io.TitleChange = null;
 
         string? crash = null;
         var outOfFuel = false;
@@ -754,6 +776,12 @@ public sealed class Vm : IDisposable
             process.Ui = ui.Root;
             process.UiText = ui.Text;
             _io.UiChange = null;
+        }
+
+        if (_io.TitleChange is { } title)
+        {
+            process.Title = title == "" ? null : title;
+            _io.TitleChange = null;
         }
 
         var used = fuel - process.Store.Fuel;
@@ -978,6 +1006,9 @@ public sealed class Vm : IDisposable
         public ProgramUiNode? Ui;
 
         public string UiText = "";
+
+        /// <summary>The title it gives the terminal window while it's in front, if any.</summary>
+        public string? Title;
 
         public void Dispose()
         {

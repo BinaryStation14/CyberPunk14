@@ -270,8 +270,8 @@ public sealed class VmTest
 
         Assert.That(m.Vm.Upload(_host, "junk.bin", "not wasm at all"u8.ToArray()), Does.Contain("not a valid program"));
         Assert.That(m.Upload("future.bin",
-                """(module (import "sb_v9" "teleport" (func)) (memory (export "memory") 1) (func (export "start")))"""),
-            Does.Contain("needs host API v9"));
+                """(module (import "sb_v99" "teleport" (func)) (memory (export "memory") 1) (func (export "start")))"""),
+            Does.Contain("needs host API v99"));
         Assert.That(m.Upload("other.bin",
                 """(module (import "env" "f" (func)) (memory (export "memory") 1) (func (export "start")))"""),
             Does.Contain("imports \"env\""));
@@ -433,6 +433,47 @@ public sealed class VmTest
         m.Vm.TypeLine("run nest.bin");
         m.RunUntil("too deep");
         Assert.That(m.Vm.Processes, Has.Count.EqualTo(WasmHost.MaxDepth));
+    }
+
+    [Test]
+    public void TheFrontProgramNamesTheWindow()
+    {
+        using var m = Machine.Boot(_host);
+        Assert.That(m.Vm.Title, Is.Null);
+
+        // Names the window when it starts, and ends when a line is typed.
+        m.Upload("mail.bin", """
+            (module
+              (import "sb_v9" "term_title" (func $title (param i32 i32) (result i32)))
+              (import "sb_v0" "term_read" (func $read (param i32 i32) (result i32)))
+              (import "sb_v0" "exit" (func $exit (param i32)))
+              (memory (export "memory") 1)
+              (data (i32.const 0) "  Mail\01")
+              (func (export "start")
+                (drop (call $title (i32.const 0) (i32.const 7))))
+              (func (export "tick")
+                (if (i32.gt_s (call $read (i32.const 100) (i32.const 64)) (i32.const 0))
+                  (then (call $exit (i32.const 0))))))
+            """);
+
+        m.Vm.TypeLine("run mail.bin");
+        for (var i = 0; i < 20 && m.Vm.Title == null; i++)
+        {
+            m.Tick();
+        }
+
+        // Trimmed, without the control character.
+        Assert.That(m.Vm.Title, Is.EqualTo("Mail"));
+
+        // The window goes back to the shell's title when the program ends.
+        m.Vm.TypeLine("q");
+        for (var i = 0; i < 20 && m.Vm.Processes.Count > 1; i++)
+        {
+            m.Tick();
+        }
+
+        Assert.That(m.Vm.Processes, Is.EqualTo(new[] { "os" }));
+        Assert.That(m.Vm.Title, Is.Null);
     }
 
     [Test]

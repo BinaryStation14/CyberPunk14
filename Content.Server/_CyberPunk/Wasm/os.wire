@@ -21,6 +21,11 @@ queue_at = 0
 # again once it has ended.
 waiting = False
 
+# The terminal window's title: this computer's hostname and address. A router
+# can hand out an address after boot, so it's looked at again every second.
+shown_title = ""
+title_at = -1000
+
 HELP = [
     "help                       this list",
     "man [TOPIC]                the manual (start here)",
@@ -340,6 +345,7 @@ def hostname(rest):
     if rest != "":
         if not net.set_hostname(rest):
             say("hostname: a name is 1 to 32 of a-z, 0-9 and -\n")
+        title_at = -1000
         return
     name = net.hostname()
     if name == None:
@@ -353,6 +359,23 @@ def hosts():
         say("(no hostnames known on this network)\n")
     for name in known.keys():
         say(name + " " + known[name] + "\n")
+
+def update_title():
+    if sys.clock() - title_at < 1000:
+        return
+    title_at = sys.clock()
+    name = net.hostname()
+    address = net.address()
+    text = ""
+    if name != None and address != None:
+        text = name + " (" + address + ")"
+    elif name != None:
+        text = name
+    elif address != None:
+        text = address
+    if text != shown_title:
+        shown_title = text
+        term.title(text)
 
 def ip():
     address = net.address()
@@ -427,6 +450,7 @@ def command(line):
 # ---- Hooks
 
 def tick():
+    update_title()
     if waiting:
         waiting = False
         say(PROMPT)
@@ -443,6 +467,7 @@ def tick():
 
 # ---- Boot
 
+update_title()
 say(NAME + " (kernel v" + str(sys.version()) + ")\n")
 say("Type `help` for commands, `man` for the manual.\n")
 if is_deck():

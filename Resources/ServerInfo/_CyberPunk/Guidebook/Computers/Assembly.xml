@@ -11,7 +11,7 @@
   A program exports its memory and a [mono]start[/mono] function, and may export [mono]tick[/mono] to be called 30 times a second. Every computer has [mono]keys.wat[/mono], a short example to read.
 
   ## The kernel
-  Programs reach the machine through kernel functions, which they import from a versioned module such as [mono]sb_v8[/mono]. Each kernel version keeps every function from the versions before it, so old programs keep working. Most functions write their results into the program's memory and return a length, or a negative number when they fail.
+  Programs reach the machine through kernel functions, which they import from a versioned module such as [mono]sb_v9[/mono]. Each kernel version keeps every function from the versions before it, so old programs keep working. Most functions write their results into the program's memory and return a length, or a negative number when they fail.
 
   Wire programs use the same functions; the Wire modules are a friendlier way to call them.
 
