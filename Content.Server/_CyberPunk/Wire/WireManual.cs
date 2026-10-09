@@ -69,8 +69,9 @@ public static class WireManual
             The machine's own functions are in modules: term, fs, net and sys on
             every machine (man modules), door on door controllers (man door),
             camera on cameras (man camera), ice for ICE programs on computers (man
-            ice), deck on netrunners' decks (man deck) and body in implants (man
-            implant).
+            ice), deck on netrunners' decks (man deck), body in implants (man
+            implant), and dev for working other machines from a computer (man
+            dev).
 
             """);
         return page.ToString();
@@ -96,7 +97,25 @@ public static class WireManual
         page.Append(ModuleEntries("term"));
         page.Append("  term.ENTER, term.BACKSPACE, term.TAB, term.DELETE, term.UP, term.DOWN,\n  term.LEFT, term.RIGHT, term.HOME, term.END, term.PAGE_UP, term.PAGE_DOWN\n      The keys term.key() returns that aren't characters.\n");
         page.Append("\nComputers can show a UI of buttons, lists and drawing instead of text: man ui.\n");
+        page.Append("\nComputers can also work other machines on the network that have a UI, like vending machines and consoles: man dev.\n");
         page.Append("\nDoors, cameras, ICE, decks and implants have more: man door, man camera, man ice, man deck, man implant.\n");
+        return page.ToString();
+    }
+
+    /// <summary>
+    /// The Wire part of <c>man dev</c>: the dev module.
+    /// </summary>
+    public static string Dev()
+    {
+        var page = new StringBuilder("In Wire, the dev module works them:\n\n");
+        page.Append("""
+              print(dev.info("10.2.1.5"))
+              stock = dev.state("10.2.1.5")
+              if not dev.call("10.2.1.5", "vending_machine_eject", {"type": "Regular", "id": "DrinkColaCan"}):
+                  print(sys.error())
+
+            """);
+        page.Append(ModuleEntries("dev"));
         return page.ToString();
     }
 

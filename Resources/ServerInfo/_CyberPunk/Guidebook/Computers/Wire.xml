@@ -31,6 +31,7 @@
   - [bold]fs[/bold]: files on the disk.
   - [bold]term[/bold]: the terminal: reading lines, raw key presses for full-screen programs, clearing the screen, and naming the window ([mono]term.title("Mail")[/mono]).
   - [bold]net[/bold]: sending and receiving packets, addresses and hostnames.
+  - [bold]dev[/bold]: working vending machines, consoles and other machines with a window, over the network ([mono]man dev[/mono]).
   - [bold]ui[/bold]: a window of buttons, lists and drawings in place of the text. See [textlink="Program UIs" link="ProgramUis"].
 
   [mono]man modules[/mono] lists every function. When a call fails, [mono]sys.error()[/mono] says why.

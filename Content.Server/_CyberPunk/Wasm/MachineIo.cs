@@ -49,6 +49,19 @@ public sealed record Requester(string Name, string Holding, IReadOnlyList<string
 public sealed record FirmwareFlash(uint To, string Name, byte[] Bytes);
 
 /// <summary>
+/// The machines with a UI of their own that a computer's programs reach over the network.
+/// </summary>
+public interface IMachineDevices
+{
+    /// <summary>
+    /// The answer of the machine at <paramref name="address"/> to a request (<c>info</c>, <c>state</c> or
+    /// <c>call NAME ARGS</c>): a value as Wire's <c>repr</c> writes it, or <c>!</c> and why it wasn't done.
+    /// Null when no such machine is there.
+    /// </summary>
+    string? Request(uint address, string request);
+}
+
+/// <summary>
 /// Everything about a machine that a program can touch through the kernel. Every store a machine's programs
 /// run in carries the machine's one <see cref="MachineIo"/>, and the VM sets which process is being called
 /// before each call.
@@ -57,6 +70,9 @@ public sealed class MachineIo
 {
     /// <summary>Device commands a machine can give in one tick, every program on it together.</summary>
     public const int CommandsPerTick = 32;
+
+    /// <summary>Requests a machine's programs can make of other machines in one tick, every program together.</summary>
+    public const int DeviceRequestsPerTick = 8;
 
     /// <summary>The longest a hostname can be.</summary>
     public const int MaxHostname = 32;
@@ -161,6 +177,12 @@ public sealed class MachineIo
     public Requester? Request;
 
     public FirmwareFlash? Flash;
+
+    /// <summary>The machines with a UI on the network, for <c>dev_request</c>.</summary>
+    public IMachineDevices? Devices;
+
+    /// <summary>Requests made of other machines this tick, every program on this one together.</summary>
+    public int DeviceRequests;
 
     public MachineIo()
     {

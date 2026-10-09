@@ -74,10 +74,10 @@ public sealed record KernelHook(string Name, string Signature, KernelScope Scope
 public static class Kernel
 {
     /// <summary>
-    /// The newest kernel version. Programs import from <c>sb_v0</c> up to <c>sb_v9</c>, and every one is
+    /// The newest kernel version. Programs import from <c>sb_v0</c> up to <c>sb_v10</c>, and every one is
     /// provided, so programs built against an older kernel keep working.
     /// </summary>
-    public const int ApiVersion = 9;
+    public const int ApiVersion = 10;
 
     /// <summary>
     /// The screen is 80 columns; manual pages are wrapped to fit.
@@ -223,6 +223,8 @@ public static class Kernel
             "Takes this program's UI down, so the terminal shows text again."),
         new("build", "(param $src i32 $src_len i32 $out i32 $out_len i32 $err i32 $err_cap i32) (result i32)", KernelScope.Computer, 2,
             "Builds the source file src (WAT if it ends in .wat, Wire otherwise; 64 KiB at most) into the program file out. Returns its size; or -1 no such file, -2 source too big, -3 doesn't build (why, with the line, goes to err), -4 can't write out."),
+        new("dev_request", "(param $addr i32 $req i32 $len i32 $buf i32 $cap i32) (result i32)", KernelScope.Computer, 10,
+            $"Asks the machine with a UI at addr (a vending machine, an air alarm...) something, and copies its answer into buf (man dev). The request is info (what it is and the calls it takes), state (what its UI shows) or call NAME ARGS (does what one of its UI's buttons does). The answer is a value written as repr() writes it, or ! and why it wasn't done. Returns the answer's full length (ask again with room if that's more than cap: info and state are safe to repeat), or -1 if no such machine answers. {MachineIo.DeviceRequestsPerTick} requests a tick."),
         new("flash", "(param $addr i32 $name i32 $len i32) (result i32)", KernelScope.Computer, 2,
             "Sends the program in a file over the network to replace the firmware of the device at addr, which only takes it with its maintenance panel open. 0 sent (the result shows on the terminal), -1 unreachable, -2 not a program."),
         new("door_status", "(result i32)", KernelScope.DoorController, 2,
@@ -471,6 +473,38 @@ public static class Kernel
         return page.ToString();
     }
 
+    private static string DevPage()
+    {
+        var page = new StringBuilder($"""
+            MACHINES ON THE NETWORK
+
+            Any machine people work through a window, like a vending machine, a
+            console or a fax, joins the network when it stands on data cable, and
+            gets an address of its own (net.neighbours() lists it).
+            A program on a computer can ask it what it is, read what its window
+            shows, and press what its window has, as if someone stood at it.
+
+            It does what it's asked as the computer, which has no ID: a machine
+            that needs access turns it away. A machine without power doesn't
+            answer. A computer can make {MachineIo.DeviceRequestsPerTick} requests a tick.
+
+            Answers are Wire values: info is a dict of the machine's name, its kind
+            and its calls (each with the arguments it takes and what they are); a
+            call takes a dict of those arguments. Numbers are whole numbers, and
+            other machines and things are their ids.
+
+            LOW-LEVEL KERNEL FUNCTIONS (computers only)
+
+            """);
+        foreach (var f in Functions.Where(f => f.Name.StartsWith("dev_")))
+        {
+            page.Append(Describe(f));
+        }
+
+        page.Append('\n').Append(WireManual.Dev());
+        return page.ToString();
+    }
+
     private const string BootPage = """
         BOOT
 
@@ -551,6 +585,7 @@ public static class Kernel
           man shell      the shell's commands
           man boot       swapping the operating system
           man ui         programs with buttons, lists and drawing
+          man dev        working vending machines, consoles and the like
           man flash      putting programs on devices
           man firmware   what doors and cameras do out of the box
           man kernel     low-level kernel functions
@@ -590,6 +625,8 @@ public static class Kernel
                 return BootPage;
             case "ui":
                 return UiPage();
+            case "dev":
+                return DevPage();
             case "wire":
                 return WireManual.Reference();
             case "modules":

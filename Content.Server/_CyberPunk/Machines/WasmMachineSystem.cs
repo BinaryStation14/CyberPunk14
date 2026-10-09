@@ -18,8 +18,9 @@ namespace Content.Server._CyberPunk.Machines;
 /// together share <see cref="FuelPerTick"/> and <see cref="TimePerTick"/> of real time. Machines over the
 /// budget wait for the next tick, first in line, so no number of busy computers can slow the server down. A
 /// machine that waited is told how much time passed, so its clock is always right.
-/// Packets go over the network (WasmMachineSystem.Network.cs). Machines have no devices yet, so what their
-/// programs tell devices to do is dropped.
+/// Packets go over the network (WasmMachineSystem.Network.cs), and computers' programs reach machines with a
+/// UI of their own over it (WasmMachineSystem.Devices.cs). Door and camera controllers have no devices yet, so
+/// what their programs tell devices to do is dropped.
 /// </remarks>
 public sealed partial class WasmMachineSystem : EntitySystem
 {
@@ -57,6 +58,7 @@ public sealed partial class WasmMachineSystem : EntitySystem
         SubscribeLocalEvent<WasmMachineComponent, ComponentShutdown>(OnShutdown);
         SubscribeLocalEvent<WasmMachineComponent, PowerChangedEvent>(OnPowerChanged);
         InitializeNetwork();
+        InitializeDevices();
 
         Subs.BuiEvents<WasmMachineComponent>(MachineTerminalUiKey.Key, subs =>
         {
@@ -90,6 +92,7 @@ public sealed partial class WasmMachineSystem : EntitySystem
         }
 
         vm.Hostname = ent.Comp.Hostname;
+        vm.Devices = new DeviceLink(this, ent);
         ent.Comp.Hostname = vm.Hostname;
         ent.Comp.Vm = vm;
         _networkDirty = true;

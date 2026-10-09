@@ -395,6 +395,68 @@ public sealed class WireTest
         Assert.That(Encoding.UTF8.GetString(sent[0].Data), Does.StartWith("ok at "));
     }
 
+    private sealed class FakeDevices : IMachineDevices
+    {
+        public readonly List<(uint, string)> Requests = new();
+
+        public string? Request(uint address, string request)
+        {
+            Requests.Add((address, request));
+            return request switch
+            {
+                "info" => """{"name": "Vendomat", "calls": {"eject": {"id": "text"}}, "n": -12, "ok": True, "x": None, "s": "a\"b\n"}""",
+                "state" => """[1, [ ], {}, "tab\there"]""",
+                "call broken {}" => "!broken: no such call",
+                _ => "None",
+            };
+        }
+    }
+
+    [Test]
+    public void ProgramsWorkMachinesOnTheNetwork()
+    {
+        const string src = """
+            print(dev.info("vend"))
+            print(dev.state("10.2.1.3"))
+            print(dev.call("vend", "eject", {"id": "Cola"}), dev.call("vend", "eject"))
+            print(dev.call("vend", "broken"), sys.error())
+            print(dev.info("nobody"), sys.error())
+            print(dev.state("10.2.1.9"), sys.error())
+            """;
+
+        var devices = new FakeDevices();
+        using var vm = Vm.WithFirmware("prog", _host.Load(WireCompiler.Compile(src)), DeviceKind.Computer);
+        vm.SetNetwork(0x0A020101,
+            new HashSet<uint> { 0x0A020101, 0x0A020103 },
+            [0x0A020103],
+            new Dictionary<string, uint> { ["vend"] = 0x0A020103 });
+        vm.Devices = devices;
+        vm.PowerOn(_host);
+        vm.Tick(_host, 33, WasmHost.FuelPerCall);
+
+        Assert.That(vm.TakeOutput(), Does.StartWith(
+            "{\"name\": \"Vendomat\", \"calls\": {\"eject\": {\"id\": \"text\"}}, \"n\": -12, \"ok\": True, \"x\": None, \"s\": \"a\\\"b\\n\"}\n" +
+            "[1, [], {}, \"tab\\there\"]\n" +
+            "True True\n" +
+            "False broken: no such call\n" +
+            "None there's no machine called nobody\n" +
+            "None 10.2.1.9 doesn't answer\n"));
+        Assert.That(devices.Requests, Is.EqualTo(new List<(uint, string)>
+        {
+            (0x0A020103, "info"),
+            (0x0A020103, "state"),
+            (0x0A020103, "call eject {\"id\": \"Cola\"}"),
+            (0x0A020103, "call eject {}"),
+            (0x0A020103, "call broken {}"),
+        }));
+    }
+
+    [Test]
+    public void DevicesOnlyAnswerComputers()
+    {
+        Assert.That(Run("dev.info('vend')", DeviceKind.DoorController), Does.Contain("dev.info only works on computers"));
+    }
+
     [Test]
     public void Hostnames()
     {
@@ -602,7 +664,7 @@ public sealed class WireTest
     [Test]
     public void TheManualCoversEverything()
     {
-        var all = string.Concat(new[] { "wire", "modules", "computer", "door", "camera", "ice", "deck", "implant", "hooks", "ui" }
+        var all = string.Concat(new[] { "wire", "modules", "computer", "door", "camera", "ice", "deck", "implant", "hooks", "ui", "dev" }
             .Select(topic => Kernel.Man(topic) ?? throw new AssertionException($"no page on {topic}")));
 
         // Pages are wrapped to the screen, so compare without line breaks.
