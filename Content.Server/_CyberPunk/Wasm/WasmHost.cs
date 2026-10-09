@@ -206,11 +206,16 @@ public sealed class WasmHost : IDisposable
     }
 
     /// <summary>
-    /// The first line of an error, which is what players see: Wasmtime adds a backtrace after it.
+    /// The first line of an error, which is what players see: Wasmtime adds a backtrace after it. A trap puts
+    /// its cause after the backtrace, so that is used instead.
     /// </summary>
     internal static string FirstLine(string message)
     {
         var line = message.Trim();
+        var cause = line.IndexOf("Caused by:", StringComparison.Ordinal);
+        if (cause >= 0)
+            line = line[(cause + "Caused by:".Length)..].Trim();
+
         var end = line.IndexOf('\n');
         return end < 0 ? line : line[..end].TrimEnd();
     }

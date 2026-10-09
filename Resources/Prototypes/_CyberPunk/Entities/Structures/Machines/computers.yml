@@ -7,8 +7,11 @@
   - type: WasmMachine
     files:
       readme.txt: |
-        This computer runs WebAssembly programs.
+        This computer runs WebAssembly programs, which you write in Wire
+        (`man wire`) or by hand in WAT (`man wat`).
         Type `help` for the shell's commands, and `man` for the manual.
+        Try `new hello`, `build hello.wire` and `run hello.wasm` for your first
+        Wire program. The examples folder has more: `ls`, then `cat` one.
         Try `build keys.wat` and `run keys.wasm` to see raw mode.
       hello.wat: (module (import "sb_v5" "term_write" (func $write (param i32 i32))) (memory (export "memory") 1) (data (i32.const 0) "Hello from a program!\n") (func (export "start") (call $write (i32.const 0) (i32.const 22))))
       keys.wat: |
@@ -47,6 +50,164 @@
                 (call $write (i32.const 100) (i32.const 4))
                 (call $write (local.get $p) (i32.sub (i32.const 121) (local.get $p)))
                 (br $next)))))
+      examples/hello.wire: |
+        # hello.wire: prints a greeting and what is on the disk.
+        #     build examples/hello.wire
+        #     run examples/hello.wasm
+
+        print("Hello from a Wire program!")
+        print("This computer has been up for", sys.clock(), "ms.")
+        print("Files on its disk:", ", ".join(fs.files()))
+      examples/spin.wire: |
+        # spin.wire: a badly behaved program, an endless loop. The machine's fuel
+        # budget stops it on its first go, and everything else carries on.
+        #     run examples/spin.wasm
+
+        print("Spinning forever...")
+        n = 0
+        while True:
+            n += 1
+      examples/echo_server.wire: |
+        # echo_server.wire: an echo server. It answers every packet sent to this
+        # computer's port 7 with the same text, and shows what it got. Type quit
+        # to stop it. Try it with ping from another computer.
+        #     run examples/echo_server.wasm
+
+        ECHO = 7
+
+        me = net.address()
+        if me == None:
+            print("echo server: this computer has no network address")
+            sys.exit(1)
+        else:
+            print("echo server listening on", me, "port", ECHO)
+            print("(type quit to stop)")
+
+        def tick():
+            for packet in net.receive():
+                if packet.port == ECHO:
+                    print(packet.sender, "says:", packet.text)
+                    net.send(packet.sender, ECHO, packet.text)
+            line = term.read_line()
+            if line != None and line.strip() == "quit":
+                print("echo server stopped")
+                sys.exit()
+      examples/ping.wire: |
+        # ping.wire: sends a message to the echo server (port 7) at an address and
+        # waits up to three seconds for it to come back.
+        #     run examples/ping.wasm ADDR [MESSAGE]
+
+        ECHO = 7
+        TIMEOUT = 3000
+
+        target = None
+        sent = 0
+        words = sys.args().split()
+        if len(words) == 0:
+            print("usage: run ping.wasm ADDR [MESSAGE]")
+            sys.exit(1)
+        else:
+            target = words.pop(0)
+            message = " ".join(words)
+            if message == "":
+                message = "ping"
+            if net.send(target, ECHO, message):
+                print("ping " + target + ": " + message)
+                sent = sys.clock()
+            else:
+                print("ping " + target + ": can't send")
+                sys.exit(1)
+
+        def tick():
+            elapsed = sys.clock() - sent
+            for packet in net.receive():
+                if packet.sender == target and packet.port == ECHO:
+                    print("reply from", target, "in", elapsed, "ms:", packet.text)
+                    sys.exit(0)
+                    return
+            if elapsed > TIMEOUT:
+                print("no reply from", target)
+                sys.exit(1)
+      examples/opendoor.wire: |
+        # opendoor.wire: sends a command to the door controller at an address and
+        # shows what it says back. The command is open if you give none; the stock
+        # door firmware also takes close, bolt, unbolt and status (man firmware).
+        # Find the building's door controllers with netscan.
+        #     run examples/opendoor.wasm ADDR [COMMAND]
+        #     run examples/opendoor.wasm 10.4.1.3 open
+
+        DOOR = 1701
+        TIMEOUT = 3000
+
+        target = None
+        sent = 0
+        words = sys.args().split()
+        if len(words) == 0:
+            print("usage: run opendoor.wasm ADDR [COMMAND]   (man firmware)")
+            sys.exit(1)
+        else:
+            target = words[0]
+            command = "open"
+            if len(words) > 1:
+                command = words[1]
+            if net.send(target, DOOR, command):
+                sent = sys.clock()
+            else:
+                print("door " + target + ": can't send (is it on this network?)")
+                sys.exit(1)
+
+        def tick():
+            for packet in net.receive():
+                if packet.sender == target and packet.port == DOOR:
+                    print("door " + target + ": " + packet.text)
+                    sys.exit(0)
+                    return
+            if sys.clock() - sent > TIMEOUT:
+                print("door " + target + ": no answer")
+                sys.exit(1)
+      examples/netscan.wire: |
+        # netscan.wire: lists the other machines on this building's network, then
+        # asks each whether it is a door controller (port 1701) or a camera (port
+        # 1702), and shows what answers within a second.
+        #     run examples/netscan.wasm
+
+        DOOR = 1701
+        CAMERA = 1702
+        WAIT = 1000
+
+        queue = []
+        found = {}
+        started = 0
+
+        me = net.address()
+        if me == None:
+            print("netscan: this computer has no network address")
+            sys.exit(1)
+        else:
+            queue = net.neighbours()
+            print(me + ":", len(queue), "other hosts on this network")
+            started = sys.clock()
+
+        def tick():
+            # A few hosts a tick: a machine may only send so many packets at once.
+            asked = 0
+            while asked < 4 and len(queue) > 0:
+                host = queue.pop()
+                net.send(host, DOOR, "status")
+                net.send(host, CAMERA, "count")
+                found[host] = "host"
+                asked += 1
+            if len(queue) > 0:
+                started = sys.clock()
+            for packet in net.receive():
+                if packet.port == DOOR:
+                    found[packet.sender] = "door controller (door " + packet.text + ")"
+                elif packet.port == CAMERA:
+                    found[packet.sender] = "camera (sees " + packet.text + ")"
+            if sys.clock() - started > WAIT:
+                for host in sorted(found.keys()):
+                    print("  " + host, found[host])
+                sys.exit(0)
   - type: ActivatableUI
     key: enum.MachineTerminalUiKey.Key
   - type: UserInterface

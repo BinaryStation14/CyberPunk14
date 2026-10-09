@@ -137,7 +137,7 @@ public sealed class VmTest
         Assert.That(m.Command("frobnicate"), Does.Contain("frobnicate: unknown command"));
         Assert.That(m.Command("ver"), Does.Contain("CyberPunk14 stub OS 0.1, kernel v5"));
         Assert.That(m.Command("uptime"), Does.Match(@"up \d+ s"));
-        Assert.That(m.Command("help"), Does.Contain("build FILE.wat"));
+        Assert.That(m.Command("help"), Does.Contain("build FILE"));
     }
 
     [Test]
@@ -254,7 +254,8 @@ public sealed class VmTest
               (func $deeper (call $deeper))
               (func (export "start") (call $deeper)))
             """);
-        Assert.That(m.Command("run recurse.wasm"), Does.Contain("[recurse.wasm crashed"));
+        // Players see why it trapped, not the start of a backtrace.
+        Assert.That(m.Command("run recurse.wasm"), Does.Contain("[recurse.wasm crashed: wasm trap: call stack exhausted]"));
 
         // Pointers outside its memory trap instead of reading the host's.
         m.Upload("snoop.wasm", WasmSamples.BadPointer);
@@ -365,8 +366,6 @@ public sealed class VmTest
         Assert.That(bad.Length, Is.GreaterThan("build: bad.wat:\n\n$ ".Length + "build bad.wat\n".Length));
 
         Assert.That(m.Command("build nothing.wat"), Does.Contain("build: nothing.wat: no such file"));
-        m.Vm.SeedFile("prog.wire", "print(1)"u8.ToArray());
-        Assert.That(m.Command("build prog.wire"), Does.Contain("Write WAT instead"));
     }
 
     private const string Loop = """
