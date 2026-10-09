@@ -1,0 +1,102 @@
+# Data cable, network switches and routers: what joins programmable machines into networks.
+
+- type: entity
+  parent: [ CablePhysBase, StructureHealthContainerWeak ]
+  id: CableData
+  name: data cable
+  description: A cable that carries data between networked machines, switches and routers. On its own it carries nothing; a router has to serve it.
+  components:
+  - type: Sprite
+    drawdepth: ThinWire
+    visible: false
+    color: Cyan
+    sprite: Structures/Power/Cables/lv_cable.rsi
+    state: lvcable_0
+  - type: Icon
+    sprite: Structures/Power/Cables/lv_cable.rsi
+    state: lvcable_4
+  - type: Damageable
+    damageModifierSet: RodMetalMod
+  - type: Destructible
+    thresholds:
+    - trigger:
+        !type:DamageTrigger
+        damage: 60
+      behaviors:
+      - !type:SpawnEntitiesBehavior
+        spawn:
+          CableDataStack1:
+            min: 1
+            max: 1
+      - !type:DoActsBehavior
+        acts: [ "Destruction" ]
+  - type: SubFloorHide
+  - type: NodeContainer
+    nodes:
+      data:
+        !type:CableNode
+        nodeGroupID: Data
+  - type: Cable
+    cableDroppedOnCutPrototype: CableDataStack1
+    cableType: Data
+  - type: DataCable
+  - type: CableVis
+    node: data
+  - type: CableVisualizer
+    statePrefix: lvcable_
+  - type: RCDDeconstructable
+    cost: 2
+    delay: 0
+    fx: EffectRCDConstruct0
+
+- type: entity
+  abstract: true
+  parent: [ BaseMachinePowered, BaseMachineDestructible ]
+  id: NetworkHubBase
+  components:
+  - type: Sprite
+    sprite: Structures/Machines/server.rsi
+    snapCardinals: true
+    layers:
+    - state: server-off
+    - state: server-on
+      visible: false
+      map: [ "enum.PowerDeviceVisualLayers.Powered" ]
+  - type: GenericVisualizer
+    visuals:
+      enum.PowerDeviceVisuals.Powered:
+        enum.PowerDeviceVisualLayers.Powered:
+          True: { visible: true }
+          False: { visible: false }
+  - type: Appearance
+  - type: ApcPowerReceiver
+    powerLoad: 200
+  - type: AmbientOnPowered
+  - type: AmbientSound
+    volume: -9
+    range: 5
+    enabled: false
+    sound:
+      collection: ServerFans
+  - type: NodeContainer
+    nodes:
+      data:
+        !type:DataHubNode
+        nodeGroupID: Data
+
+- type: entity
+  parent: NetworkHubBase
+  id: NetworkSwitch
+  name: network switch
+  description: Joins the data cable on its tile and the four beside it, and any switch or router racked next to it, into one network while it has power. It gives out no addresses; that takes a router.
+  components:
+  - type: NetworkHub
+
+- type: entity
+  parent: NetworkHubBase
+  id: NetworkRouter
+  name: network router
+  description: Joins the data cable around it like a switch, gives every machine on its network an address, connects its network to the others in the city, and keeps the directory of hostnames the machines publish.
+  components:
+  - type: NetworkHub
+    router: true

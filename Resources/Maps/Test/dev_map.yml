@@ -5,7 +5,7 @@ meta:
   forkId: ""
   forkVersion: ""
   time: 08/23/2026 10:22:08
-  entityCount: 3797
+  entityCount: 3812
 maps:
 - 23
 grids:
@@ -7420,6 +7420,75 @@ entities:
     - type: Transform
       parent: 1
       pos: 56.52971,43.0394
+- proto: CableData
+  entities:
+  - uid: 3798
+    components:
+    - type: Transform
+      parent: 1
+      pos: 17.5,65.5
+  - uid: 3799
+    components:
+    - type: Transform
+      parent: 1
+      pos: 18.5,65.5
+  - uid: 3800
+    components:
+    - type: Transform
+      parent: 1
+      pos: 19.5,65.5
+  - uid: 3801
+    components:
+    - type: Transform
+      parent: 1
+      pos: 20.5,65.5
+  - uid: 3802
+    components:
+    - type: Transform
+      parent: 1
+      pos: 21.5,65.5
+  - uid: 3803
+    components:
+    - type: Transform
+      parent: 1
+      pos: 23.5,65.5
+  - uid: 3804
+    components:
+    - type: Transform
+      parent: 1
+      pos: 24.5,65.5
+  - uid: 3805
+    components:
+    - type: Transform
+      parent: 1
+      pos: 25.5,65.5
+  - uid: 3806
+    components:
+    - type: Transform
+      parent: 1
+      pos: 26.5,65.5
+  - uid: 3807
+    components:
+    - type: Transform
+      parent: 1
+      pos: 27.5,65.5
+  - uid: 3808
+    components:
+    - type: Transform
+      parent: 1
+      pos: 21.5,64.5
+  - uid: 3809
+    components:
+    - type: Transform
+      parent: 1
+      pos: 23.5,64.5
+- proto: CableDataStack
+  entities:
+  - uid: 3812
+    components:
+    - type: Transform
+      parent: 1
+      pos: 20.5,60.5
 - proto: CableHV
   entities:
   - uid: 1880
@@ -12634,31 +12703,43 @@ entities:
     - type: Transform
       parent: 1
       pos: 17.5,65.5
+    - type: WasmMachine
+      hostname: dev-1
   - uid: 3747
     components:
     - type: Transform
       parent: 1
       pos: 19.5,65.5
+    - type: WasmMachine
+      hostname: dev-2
   - uid: 3748
     components:
     - type: Transform
       parent: 1
       pos: 21.5,65.5
+    - type: WasmMachine
+      hostname: dev-3
   - uid: 3749
     components:
     - type: Transform
       parent: 1
       pos: 23.5,65.5
+    - type: WasmMachine
+      hostname: dev-4
   - uid: 3750
     components:
     - type: Transform
       parent: 1
       pos: 25.5,65.5
+    - type: WasmMachine
+      hostname: dev-5
   - uid: 3751
     components:
     - type: Transform
       parent: 1
       pos: 27.5,65.5
+    - type: WasmMachine
+      hostname: dev-6
 - proto: ComputerRadar
   entities:
   - uid: 1136
@@ -16534,6 +16615,20 @@ entities:
       parent: 1
       rot: -1.5707963267948966 rad
       pos: 37.504547,15.171228
+- proto: NetworkRouter
+  entities:
+  - uid: 3811
+    components:
+    - type: Transform
+      parent: 1
+      pos: 28.5,65.5
+- proto: NetworkSwitch
+  entities:
+  - uid: 3810
+    components:
+    - type: Transform
+      parent: 1
+      pos: 22.5,64.5
 - proto: NitrogenCanister
   entities:
   - uid: 1450

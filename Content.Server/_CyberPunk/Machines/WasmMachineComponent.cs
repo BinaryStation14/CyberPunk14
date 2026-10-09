@@ -22,6 +22,18 @@ public sealed partial class WasmMachineComponent : Component
     public Dictionary<string, string> Files = new();
 
     /// <summary>
+    /// The name it goes by on the network, which its router publishes. Its programs can change it.
+    /// </summary>
+    [DataField]
+    public string Hostname = "";
+
+    /// <summary>
+    /// Its data port in its node container, where data cable joins it to a network.
+    /// </summary>
+    [DataField]
+    public string DataNode = "data";
+
+    /// <summary>
     /// The running machine. Created at map init.
     /// </summary>
     [ViewVariables]

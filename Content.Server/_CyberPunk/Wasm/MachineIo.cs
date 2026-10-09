@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text;
 using Content.Shared._CyberPunk.Machines;
 
@@ -57,6 +58,9 @@ public sealed class MachineIo
     /// <summary>Device commands a machine can give in one tick, every program on it together.</summary>
     public const int CommandsPerTick = 32;
 
+    /// <summary>The longest a hostname can be.</summary>
+    public const int MaxHostname = 32;
+
     public readonly MachineDisk Disk = new();
 
     /// <summary>The host running this machine's current call.</summary>
@@ -110,6 +114,16 @@ public sealed class MachineIo
     public IReadOnlySet<uint>? Reachable;
 
     public IReadOnlyList<uint> Neighbours = Array.Empty<uint>();
+
+    /// <summary>The name the machine goes by on the network, or empty. Kept through reboots.</summary>
+    public string Hostname = "";
+
+    /// <summary>Whether a program changed <see cref="Hostname"/> since the world last looked.</summary>
+    public bool HostnameChanged;
+
+    /// <summary>Every hostname the routers know on the machine's network, and its address.</summary>
+    public IReadOnlyDictionary<string, uint> Hosts = new Dictionary<string, uint>();
+
     public readonly Queue<Packet> Inbox = new();
     public readonly List<Packet> Outbox = new();
 
@@ -134,6 +148,25 @@ public sealed class MachineIo
     public bool Is(DeviceKind kind)
     {
         return Kind == kind || kind == DeviceKind.Computer && Kind is DeviceKind.Deck or DeviceKind.Implant;
+    }
+
+    /// <summary>
+    /// Whether a hostname can be used: 1 to <see cref="MaxHostname"/> of a-z, 0-9 and '-', not starting with
+    /// '-'.
+    /// </summary>
+    public static bool ValidHostname(string name)
+    {
+        return name.Length is > 0 and <= MaxHostname
+               && name[0] != '-'
+               && name.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '-');
+    }
+
+    /// <summary>
+    /// An address as it's written, like 10.2.1.1.
+    /// </summary>
+    public static string FormatAddress(uint address)
+    {
+        return $"{address >> 24}.{(address >> 16) & 255}.{(address >> 8) & 255}.{address & 255}";
     }
 
     public void Command(DeviceCommand command)

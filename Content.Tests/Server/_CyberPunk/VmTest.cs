@@ -114,7 +114,7 @@ public sealed class VmTest
         using var m = Machine.Boot(_host);
 
         Assert.That(m.Screen, Does.Contain("CyberPunk14 stub OS"));
-        Assert.That(m.Screen, Does.Contain("kernel v5"));
+        Assert.That(m.Screen, Does.Contain("kernel v6"));
         Assert.That(m.Vm.State, Is.EqualTo(VmState.Running));
         Assert.That(m.Vm.Processes, Is.EqualTo(new[] { "os" }));
     }
@@ -135,7 +135,7 @@ public sealed class VmTest
         Assert.That(m.Command("echo hi there"), Does.Contain("hi there\n"));
         Assert.That(m.Command("write ../evil x"), Does.Contain("write: bad file name"));
         Assert.That(m.Command("frobnicate"), Does.Contain("frobnicate: unknown command"));
-        Assert.That(m.Command("ver"), Does.Contain("CyberPunk14 stub OS 0.1, kernel v5"));
+        Assert.That(m.Command("ver"), Does.Contain("CyberPunk14 stub OS 0.1, kernel v6"));
         Assert.That(m.Command("uptime"), Does.Match(@"up \d+ s"));
         Assert.That(m.Command("help"), Does.Contain("build FILE"));
     }
@@ -586,7 +586,7 @@ public sealed class VmTest
         Assert.That(vm.TakeOutput(), Does.StartWith("1"));
 
         vm.PowerOff();
-        vm.SetNetwork(0x0A000001, new HashSet<uint> { 0x0A000002 }, [0x0A000002]);
+        vm.SetNetwork(0x0A000001, new HashSet<uint> { 0x0A000002 }, [0x0A000002], new Dictionary<string, uint>());
         vm.PowerOn(_host);
         vm.TakeOutput();
         vm.Tick(_host, 33, WasmHost.FuelPerCall);
@@ -597,5 +597,33 @@ public sealed class VmTest
         Assert.That(sent[0].To, Is.EqualTo(0x0A000002));
         Assert.That(sent[0].Port, Is.EqualTo(7));
         Assert.That(sent[0].Data, Is.EqualTo("ping"u8.ToArray()));
+    }
+
+    [Test]
+    public void TheShellNamesTheMachine()
+    {
+        var m = Machine.Boot(_host);
+        Assert.That(m.Command("ip"), Does.Contain("ip: no address"));
+        Assert.That(m.Command("hostname"), Does.Contain("(no hostname"));
+        Assert.That(m.Command("hosts"), Does.Contain("(no hostnames known"));
+
+        Assert.That(m.Command("hostname Not Valid"), Does.Contain("hostname: a name is"));
+        m.Command("hostname lab-1");
+        Assert.That(m.Vm.TakeHostnameChanged());
+        Assert.That(m.Vm.Hostname, Is.EqualTo("lab-1"));
+        Assert.That(m.Command("hostname"), Does.Contain("lab-1\n"));
+
+        m.Vm.SetNetwork(0x0A010102,
+            new HashSet<uint> { 0x0A010102, 0x0A010203 },
+            [],
+            new Dictionary<string, uint> { ["lab-1"] = 0x0A010102, ["door"] = 0x0A010203 });
+        Assert.That(m.Command("ip"), Does.Contain("10.1.1.2\n"));
+        Assert.That(m.Command("hosts"), Does.Contain("door 10.1.2.3\nlab-1 10.1.1.2\n"));
+
+        // The name lasts through a power cut.
+        m.Vm.PowerOff();
+        m.Vm.PowerOn(_host);
+        m.RunUntil("$ ");
+        Assert.That(m.Vm.Hostname, Is.EqualTo("lab-1"));
     }
 }

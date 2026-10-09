@@ -445,6 +445,7 @@ namespace Content.Server.NodeContainer.EntitySystems
                 NodeGroupID.WireNet => Color.DarkMagenta,
                 NodeGroupID.Teg => Color.Red,
                 NodeGroupID.ExCable => Color.Pink,
+                NodeGroupID.Data => Color.Cyan, // CyberPunk
                 _ => Color.White
             };
         }

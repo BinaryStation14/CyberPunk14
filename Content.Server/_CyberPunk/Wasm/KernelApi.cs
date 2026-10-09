@@ -99,6 +99,11 @@ internal sealed class KernelApi
         foreach (var m in ModulesFor(name)) _linker.DefineFunction(m, name, fn);
     }
 
+    private void Def(string name, CallerFunc<int, int, long> fn)
+    {
+        foreach (var m in ModulesFor(name)) _linker.DefineFunction(m, name, fn);
+    }
+
     private void Def(string name, CallerFunc<int, int, int> fn)
     {
         foreach (var m in ModulesFor(name)) _linker.DefineFunction(m, name, fn);
@@ -319,6 +324,40 @@ internal sealed class KernelApi
         });
 
         Def("net_neighbours", (c, buf, cap) => WriteIds(c, buf, cap, Io(c).Neighbours));
+
+        Def("net_hostname", (c, buf, cap) => WriteText(c, buf, cap, Io(c).Hostname));
+
+        Def("net_set_hostname", (c, name, len) =>
+        {
+            var text = (uint) len > MachineIo.MaxHostname ? null : ReadText(c, name, len);
+            if (text == null || text.Length > 0 && !MachineIo.ValidHostname(text))
+                return -1;
+
+            var io = Io(c);
+            if (io.Hostname != text)
+            {
+                io.Hostname = text;
+                io.HostnameChanged = true;
+            }
+
+            return 0;
+        });
+
+        Def("net_resolve", (c, name, len) =>
+            (uint) len <= MachineIo.MaxHostname && Io(c).Hosts.TryGetValue(ReadText(c, name, len), out var addr)
+                ? addr
+                : -1L);
+
+        Def("net_hosts", (c, buf, cap) =>
+        {
+            var text = new StringBuilder();
+            foreach (var (name, addr) in Io(c).Hosts.OrderBy(h => h.Key, StringComparer.Ordinal))
+            {
+                text.Append(name).Append(' ').Append(MachineIo.FormatAddress(addr)).Append('\n');
+            }
+
+            return WriteText(c, buf, cap, text.ToString());
+        });
     }
 
     /// <summary>

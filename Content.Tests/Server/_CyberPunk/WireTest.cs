@@ -302,7 +302,7 @@ public sealed class WireTest
             ("x = chr(-1)", "-1 isn't a character"),
             ("x = len(5)", "a number has no length"),
             ("x = ','.join([1])", "join needs a list of texts, not a number"),
-            ("x = net.send('nowhere', 7, 'hi')", "\"nowhere\" isn't an address"),
+            ("x = net.send('nowhere', 70000, 'hi')", "70000 isn't a port (0 to 65535)"),
             ("x = sys.random(0)", "sys.random needs a number above 0"),
             ("x = door.open()", "door functions only work on door controllers"),
             ("x = camera.count()", "camera.count only works on cameras"),
@@ -353,7 +353,7 @@ public sealed class WireTest
             """;
 
         using var vm = Vm.WithFirmware("prog", _host.Load(WireCompiler.Compile(src)), DeviceKind.Computer);
-        vm.SetNetwork(0x0A020101, new HashSet<uint> { 0x0A020102 }, [0x0A020102]);
+        vm.SetNetwork(0x0A020101, new HashSet<uint> { 0x0A020102 }, [0x0A020102], new Dictionary<string, uint>());
         vm.PowerOn(_host);
         vm.Tick(_host, 33, WasmHost.FuelPerCall);
         Assert.That(vm.Deliver(new Packet(0x0A020102, 0x0A020101, 7, "open"u8.ToArray())));
@@ -365,6 +365,34 @@ public sealed class WireTest
         Assert.That(sent, Has.Count.EqualTo(1));
         Assert.That((sent[0].To, sent[0].Port), Is.EqualTo((0x0A020102u, (ushort) 7)));
         Assert.That(Encoding.UTF8.GetString(sent[0].Data), Does.StartWith("ok at "));
+    }
+
+    [Test]
+    public void Hostnames()
+    {
+        const string src = """
+            print(net.hostname(), net.set_hostname("Bad Name"), net.set_hostname("-x"), net.set_hostname("lab-1"), net.hostname())
+            print(net.resolve("door-3"), net.resolve("nobody"), net.resolve("10.2.1.9"), net.hosts())
+            print(net.send("door-3", 1701, "open"), net.send("nobody", 1701, "open"))
+            """;
+
+        using var vm = Vm.WithFirmware("prog", _host.Load(WireCompiler.Compile(src)), DeviceKind.Computer);
+        vm.SetNetwork(0x0A020101,
+            new HashSet<uint> { 0x0A020101, 0x0A020103 },
+            [0x0A020103],
+            new Dictionary<string, uint> { ["lab-1"] = 0x0A020101, ["door-3"] = 0x0A020103 });
+        vm.PowerOn(_host);
+        vm.Tick(_host, 33, WasmHost.FuelPerCall);
+
+        Assert.That(vm.TakeOutput(), Does.StartWith(
+            "None False False True lab-1\n" +
+            "10.2.1.3 None 10.2.1.9 {\"door-3\": \"10.2.1.3\", \"lab-1\": \"10.2.1.1\"}\n" +
+            "True False\n"));
+        Assert.That(vm.TakeHostnameChanged());
+        Assert.That(vm.Hostname, Is.EqualTo("lab-1"));
+        var sent = vm.TakeOutbox();
+        Assert.That(sent, Has.Count.EqualTo(1));
+        Assert.That((sent[0].To, sent[0].Port), Is.EqualTo((0x0A020103u, (ushort) 1701)));
     }
 
     [Test]

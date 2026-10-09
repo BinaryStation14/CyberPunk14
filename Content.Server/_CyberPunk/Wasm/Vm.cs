@@ -276,14 +276,39 @@ public sealed class Vm : IDisposable
     #region Network and devices
 
     /// <summary>
-    /// Sets what the machine sees of the network this tick: its address, who it can reach (null when it
-    /// isn't connected) and its neighbours.
+    /// Sets what the machine sees of the network: its address, who it can reach (null when it isn't
+    /// connected), its neighbours, and the hostnames the routers know.
     /// </summary>
-    public void SetNetwork(uint? address, IReadOnlySet<uint>? reachable, IReadOnlyList<uint> neighbours)
+    public void SetNetwork(
+        uint? address,
+        IReadOnlySet<uint>? reachable,
+        IReadOnlyList<uint> neighbours,
+        IReadOnlyDictionary<string, uint> hosts)
     {
         _io.Address = address;
         _io.Reachable = reachable;
         _io.Neighbours = neighbours;
+        _io.Hosts = hosts;
+    }
+
+    /// <summary>
+    /// The name the machine goes by on the network, or empty. Programs set it with <c>net_set_hostname</c>; it
+    /// is kept through reboots.
+    /// </summary>
+    public string Hostname
+    {
+        get => _io.Hostname;
+        set => _io.Hostname = MachineIo.ValidHostname(value) ? value : "";
+    }
+
+    /// <summary>
+    /// Whether a program changed the hostname since the last call.
+    /// </summary>
+    public bool TakeHostnameChanged()
+    {
+        var changed = _io.HostnameChanged;
+        _io.HostnameChanged = false;
+        return changed;
     }
 
     /// <summary>

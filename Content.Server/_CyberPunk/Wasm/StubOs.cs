@@ -11,7 +11,8 @@ namespace Content.Server._CyberPunk.Wasm;
 /// <para>
 /// It reads typed lines, echoes them, and runs <c>help</c>, <c>man</c>, <c>ls</c>, <c>cat</c>, <c>write</c>,
 /// <c>append</c>, <c>rm</c>, <c>new</c> (a Wire program to start from), <c>build</c> (from Wire or WAT), <c>run</c> (in front, or in the background with
-/// <c>&amp;</c>), <c>jobs</c>, <c>kill</c>, <c>echo</c>, <c>uptime</c> and <c>ver</c>, with the same
+/// <c>&amp;</c>), <c>jobs</c>, <c>kill</c>, <c>hostname</c>, <c>hosts</c>, <c>ip</c>, <c>echo</c>, <c>uptime</c>
+/// and <c>ver</c>, with the same
 /// messages as Switchboard's default OS. A program it runs takes over the terminal until it ends, and the
 /// shell prompts again.
 /// </para>
@@ -45,6 +46,8 @@ public static class StubOs
         build FILE [OUT.wasm]      build a program from Wire (or WAT)
         run FILE [ARGS...] [&]     run a program (& in the background)
         jobs, kill N               background jobs: list, stop one
+        hostname [NAME]            show or set this computer's network name
+        hosts, ip                  names the router knows; this address
         echo TEXT...               print text
         uptime, ver                time since boot, versions
 
@@ -137,6 +140,14 @@ public static class StubOs
         ("k_echo", "echo"),
         ("k_uptime", "uptime"),
         ("k_ver", "ver"),
+        ("k_hostname", "hostname"),
+        ("k_hosts", "hosts"),
+        ("k_ip", "ip"),
+        ("dot", "."),
+        ("no_addr", "ip: no address (the network needs a powered router)\n"),
+        ("bad_host", "hostname: a name is 1 to 32 of a-z, 0-9 and -\n"),
+        ("no_hostname", "(no hostname: set one with `hostname NAME`)\n"),
+        ("no_hosts", "(no hostnames known on this network)\n"),
     ];
 
     // Memory layout. Strings sit below Line; Out and Data are big enough for a whole file.
@@ -150,21 +161,25 @@ public static class StubOs
     // Data 1245184 (1114112) a file being written
     private const string Template = """
         (module
-          (import "sb_v5" "api_version" (func $api_version (result i32)))
-          (import "sb_v5" "clock_ms" (func $clock_ms (result i64)))
-          (import "sb_v5" "term_write" (func $term_write (param i32 i32)))
-          (import "sb_v5" "term_read" (func $term_read (param i32 i32) (result i32)))
-          (import "sb_v5" "fs_list" (func $fs_list (param i32 i32) (result i32)))
-          (import "sb_v5" "fs_read" (func $fs_read (param i32 i32 i32 i32) (result i32)))
-          (import "sb_v5" "fs_write" (func $fs_write (param i32 i32 i32 i32) (result i32)))
-          (import "sb_v5" "fs_delete" (func $fs_delete (param i32 i32) (result i32)))
-          (import "sb_v5" "exec_args" (func $exec_args (param i32 i32 i32 i32) (result i32)))
-          (import "sb_v5" "job_start" (func $job_start (param i32 i32 i32 i32) (result i32)))
-          (import "sb_v5" "job_list" (func $job_list (param i32 i32) (result i32)))
-          (import "sb_v5" "job_kill" (func $job_kill (param i32) (result i32)))
-          (import "sb_v5" "build" (func $build (param i32 i32 i32 i32 i32 i32) (result i32)))
-          (import "sb_v5" "man" (func $man (param i32 i32 i32 i32) (result i32)))
-          (import "sb_v5" "scaffold" (func $scaffold (param i32 i32 i32 i32) (result i32)))
+          (import "sb_v6" "api_version" (func $api_version (result i32)))
+          (import "sb_v6" "clock_ms" (func $clock_ms (result i64)))
+          (import "sb_v6" "term_write" (func $term_write (param i32 i32)))
+          (import "sb_v6" "term_read" (func $term_read (param i32 i32) (result i32)))
+          (import "sb_v6" "fs_list" (func $fs_list (param i32 i32) (result i32)))
+          (import "sb_v6" "fs_read" (func $fs_read (param i32 i32 i32 i32) (result i32)))
+          (import "sb_v6" "fs_write" (func $fs_write (param i32 i32 i32 i32) (result i32)))
+          (import "sb_v6" "fs_delete" (func $fs_delete (param i32 i32) (result i32)))
+          (import "sb_v6" "exec_args" (func $exec_args (param i32 i32 i32 i32) (result i32)))
+          (import "sb_v6" "job_start" (func $job_start (param i32 i32 i32 i32) (result i32)))
+          (import "sb_v6" "job_list" (func $job_list (param i32 i32) (result i32)))
+          (import "sb_v6" "job_kill" (func $job_kill (param i32) (result i32)))
+          (import "sb_v6" "build" (func $build (param i32 i32 i32 i32 i32 i32) (result i32)))
+          (import "sb_v6" "man" (func $man (param i32 i32 i32 i32) (result i32)))
+          (import "sb_v6" "scaffold" (func $scaffold (param i32 i32 i32 i32) (result i32)))
+          (import "sb_v6" "net_addr" (func $net_addr (result i64)))
+          (import "sb_v6" "net_hostname" (func $net_hostname (param i32 i32) (result i32)))
+          (import "sb_v6" "net_set_hostname" (func $net_set_hostname (param i32 i32) (result i32)))
+          (import "sb_v6" "net_hosts" (func $net_hosts (param i32 i32) (result i32)))
 
           (memory (export "memory") 36)
           @data
@@ -636,6 +651,47 @@ public static class StubOs
               (then (local.set $n (local.get $room))))
             (global.set $pend_end (i32.add (global.get $pend_end) (local.get $n))))
 
+          ;; An address as it's written, like 10.2.1.1.
+          (func $outaddr (param $a i32)
+            (call $outnum (i64.extend_i32_u (i32.shr_u (local.get $a) (i32.const 24))))
+            (call $out @dot)
+            (call $outnum (i64.extend_i32_u (i32.and (i32.shr_u (local.get $a) (i32.const 16)) (i32.const 255))))
+            (call $out @dot)
+            (call $outnum (i64.extend_i32_u (i32.and (i32.shr_u (local.get $a) (i32.const 8)) (i32.const 255))))
+            (call $out @dot)
+            (call $outnum (i64.extend_i32_u (i32.and (local.get $a) (i32.const 255)))))
+
+          (func $ip
+            (local $a i64)
+            (local.set $a (call $net_addr))
+            (if (i64.lt_s (local.get $a) (i64.const 0))
+              (then (call $out @no_addr) (return)))
+            (call $outaddr (i32.wrap_i64 (local.get $a)))
+            (call $nl))
+
+          ;; hostname shows the name; hostname NAME sets it.
+          (func $hostname
+            (local $n i32)
+            (if (global.get $rest_len)
+              (then
+                (if (call $net_set_hostname (global.get $rest) (global.get $rest_len))
+                  (then (call $out @bad_host)))
+                (return)))
+            (local.set $n (call $net_hostname (i32.const 16384) (i32.const 64)))
+            (if (i32.eqz (local.get $n))
+              (then (call $out @no_hostname) (return)))
+            (call $out (i32.const 16384) (local.get $n))
+            (call $nl))
+
+          (func $hosts
+            (local $n i32)
+            (local.set $n (call $net_hosts (i32.const 16384) (i32.const 65536)))
+            (if (i32.eqz (local.get $n))
+              (then (call $out @no_hosts) (return)))
+            (if (i32.gt_u (local.get $n) (i32.const 65536))
+              (then (local.set $n (i32.const 65536))))
+            (call $out (i32.const 16384) (local.get $n)))
+
           ;; Runs the typed line in Line. Returns 1 if a program took over the terminal.
           (func $run_command (result i32)
             (call $split (i32.const 4096) (global.get $line_len))
@@ -656,6 +712,9 @@ public static class StubOs
             (if (call $is @k_run) (then (return (call $run))))
             (if (call $is @k_jobs) (then (call $jobs) (return (i32.const 0))))
             (if (call $is @k_kill) (then (call $kill) (return (i32.const 0))))
+            (if (call $is @k_hostname) (then (call $hostname) (return (i32.const 0))))
+            (if (call $is @k_hosts) (then (call $hosts) (return (i32.const 0))))
+            (if (call $is @k_ip) (then (call $ip) (return (i32.const 0))))
             (if (call $is @k_echo)
               (then
                 (call $out (global.get $rest) (global.get $rest_len))

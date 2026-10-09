@@ -74,10 +74,10 @@ public sealed record KernelHook(string Name, string Signature, KernelScope Scope
 public static class Kernel
 {
     /// <summary>
-    /// The newest kernel version. Programs import from <c>sb_v0</c> up to <c>sb_v5</c>, and every one is
+    /// The newest kernel version. Programs import from <c>sb_v0</c> up to <c>sb_v6</c>, and every one is
     /// provided, so programs built against an older kernel keep working.
     /// </summary>
-    public const int ApiVersion = 5;
+    public const int ApiVersion = 6;
 
     /// <summary>
     /// The screen is 80 columns; manual pages are wrapped to fit.
@@ -183,6 +183,14 @@ public static class Kernel
             "Takes the next packet: its sender address and port go to meta (two little-endian u32s), its data to buf. Returns its length, or -1 if none is waiting."),
         new("net_neighbours", "(param $buf i32 $cap i32) (result i32)", KernelScope.Any, 1,
             "Copies the other addresses on this building's network into buf as little-endian u32s; returns how many there are."),
+        new("net_hostname", "(param $buf i32 $cap i32) (result i32)", KernelScope.Any, 6,
+            "Copies this machine's hostname into buf; returns its full length, 0 if it has none."),
+        new("net_set_hostname", "(param $name i32 $len i32) (result i32)", KernelScope.Any, 6,
+            "Sets this machine's hostname, which its router tells the network from the next tick: 1 to 32 of a-z, 0-9 and -, not starting with -. Empty clears it. Kept through reboots. 0 ok, -1 bad name."),
+        new("net_resolve", "(param $name i32 $len i32) (result i64)", KernelScope.Any, 6,
+            "The address of the machine with this hostname, as the routers know it, or -1."),
+        new("net_hosts", "(param $buf i32 $cap i32) (result i32)", KernelScope.Any, 6,
+            "Copies every hostname the routers know, one \"name address\" a line, sorted by name, into buf; returns the full length."),
         new("man", "(param $topic i32 $len i32 $buf i32 $cap i32) (result i32)", KernelScope.Any, 2,
             "Copies a manual page into buf (an empty topic lists them); returns its full length, or -1 for no such page."),
         new("scaffold", "(param $kind i32 $len i32 $buf i32 $cap i32) (result i32)", KernelScope.Any, 2,
