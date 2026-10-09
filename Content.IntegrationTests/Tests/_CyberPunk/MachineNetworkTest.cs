@@ -168,6 +168,77 @@ public sealed class MachineNetworkTest : GameTest
         await RunUntil(server, a, "ip: no address");
     }
 
+    /// <summary>
+    /// A vending machine on data cable gets an address, and a computer's requests read it and work it.
+    /// </summary>
+    [Test]
+    public async Task ComputersWorkMachinesWithAUi()
+    {
+        var server = Pair.Server;
+        _entMan = server.ResolveDependency<IEntityManager>();
+        _machines = _entMan.System<WasmMachineSystem>();
+        var mapSys = _entMan.System<SharedMapSystem>();
+        var power = _entMan.System<SharedPowerReceiverSystem>();
+
+        EntityUid computer = default, vending = default;
+        await server.WaitAssertion(() =>
+        {
+            mapSys.CreateMap(out var mapId);
+            _grid = mapSys.CreateGridEntity(mapId);
+            for (var x = 0; x < 4; x++)
+            {
+                for (var y = 0; y < 2; y++)
+                {
+                    mapSys.SetTile(_grid, new Vector2i(x, y), new Tile(1));
+                }
+
+                Place("CableData", x, 0);
+            }
+
+            computer = Place("ComputerProgrammable", 0, 0);
+            vending = Place("VendingMachineCola", 2, 0);
+            var router = Place("NetworkRouter", 1, 1);
+            foreach (var ent in new[] { computer, vending, router })
+            {
+                power.SetNeedsPower(ent, false);
+            }
+        });
+
+        await server.WaitRunTicks(30);
+
+        uint address = 0;
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(_machines.AddressOf(vending), Is.Not.Null, "the vending machine has an address");
+            address = _machines.AddressOf(vending)!.Value;
+
+            var info = (MachineLiteral.Dict) MachineLiteral.Parse(_machines.DeviceRequest(computer, address, "info")!)!;
+            Assert.That(info.TryGet("kind", out var kind) && kind is "VendingMachineCola");
+            Assert.That(info.TryGet("calls", out var calls) && ((MachineLiteral.Dict) calls!).TryGet("VendingMachineEject", out _));
+
+            var state = (MachineLiteral.Dict) MachineLiteral.Parse(_machines.DeviceRequest(computer, address, "state")!)!;
+            Assert.That(state.TryGet("VendingMachine", out var stock));
+            Assert.That(((MachineLiteral.Dict) stock!).TryGet("Inventory", out var inventory));
+            var item = (string) ((MachineLiteral.Dict) inventory!)[0].Key!;
+
+            Assert.That(_machines.DeviceRequest(computer, address, $"call vending_machine_eject {{\"type\": \"Regular\", \"id\": \"{item}\"}}"),
+                Is.EqualTo("None"));
+            Assert.That(_machines.DeviceRequest(computer, address, "call dance {}"), Does.StartWith("!"));
+            Assert.That(_machines.DeviceRequest(computer, address, "call vending_machine_eject {\"type\": 7}"), Does.StartWith("!"));
+            Assert.That(_machines.DeviceRequest(computer, address, "hello"), Does.StartWith("!"));
+            Assert.That(_machines.DeviceRequest(computer, address + 100, "info"), Is.Null);
+
+            power.SetNeedsPower(vending, true);
+        });
+
+        await server.WaitRunTicks(5);
+
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(_machines.DeviceRequest(computer, address, "state"), Is.EqualTo("!it has no power"));
+        });
+    }
+
     private EntityUid Place(string prototype, int x, int y)
     {
         return _entMan.SpawnEntity(prototype, new EntityCoordinates(_grid, x + 0.5f, y + 0.5f));
