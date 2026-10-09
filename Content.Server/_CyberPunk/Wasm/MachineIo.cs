@@ -72,7 +72,10 @@ public sealed class MachineIo
     public int OutputThisTick;
     public bool Truncated;
 
-    /// <summary>Typed input waiting to be read.</summary>
+    /// <summary>The line being typed, when the terminal isn't in raw mode.</summary>
+    public readonly LineEditor Editor;
+
+    /// <summary>Lines typed and waiting to be read.</summary>
     public readonly List<byte> Input = new();
 
     public ulong ClockMs;
@@ -141,6 +144,11 @@ public sealed class MachineIo
 
     public FirmwareFlash? Flash;
 
+    public MachineIo()
+    {
+        Editor = new LineEditor(Output);
+    }
+
     /// <summary>
     /// Whether this machine counts as <paramref name="kind"/>, for kernel functions only some machines have.
     /// Decks and implants are computers, with more.
@@ -183,7 +191,7 @@ public sealed class MachineIo
         Raw = on;
         Keys.Clear();
         Input.Clear();
-        Output.Append(on ? TerminalText.RawOn : TerminalText.RawOff);
+        Editor.Clear();
     }
 
     /// <summary>

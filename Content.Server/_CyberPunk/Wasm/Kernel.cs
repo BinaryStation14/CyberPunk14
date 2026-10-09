@@ -200,7 +200,7 @@ public static class Kernel
         new("device_io", "(param $port i32 $buf i32 $len i32) (result i32)", KernelScope.Any, 0,
             "The old way to work a door or camera (port 0); use the door_ and camera_ functions instead."),
         new("term_write", "(param $text i32 $len i32)", KernelScope.Computer, 0,
-            "Writes text to the terminal (4 KiB a tick at most)."),
+            "Writes text to the terminal (4 KiB a tick at most). A backspace (8) rubs out the character before it."),
         new("term_read", "(param $buf i32 $cap i32) (result i32)", KernelScope.Computer, 0,
             "Copies typed input (whole lines, each ending in a newline) into buf; returns how many bytes."),
         new("term_size", "(result i32)", KernelScope.Computer, 2,

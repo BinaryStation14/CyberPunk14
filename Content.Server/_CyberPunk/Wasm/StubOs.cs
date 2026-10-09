@@ -9,7 +9,7 @@ namespace Content.Server._CyberPunk.Wasm;
 /// </summary>
 /// <remarks>
 /// <para>
-/// It reads typed lines, echoes them, and runs <c>help</c>, <c>man</c>, <c>ls</c>, <c>cat</c>, <c>write</c>,
+/// It reads typed lines and runs <c>help</c>, <c>man</c>, <c>ls</c>, <c>cat</c>, <c>write</c>,
 /// <c>append</c>, <c>rm</c>, <c>new</c> (a Wire program to start from), <c>build</c> (from Wire or WAT), <c>run</c> (in front, or in the background with
 /// <c>&amp;</c>), <c>jobs</c>, <c>kill</c>, <c>hostname</c>, <c>hosts</c>, <c>ip</c>, <c>echo</c>, <c>uptime</c>
 /// and <c>ver</c>, with the same
@@ -782,9 +782,6 @@ public static class StubOs
                 (i32.add (i32.const 4609) (local.get $i))
                 (i32.sub (global.get $in_len) (i32.add (local.get $i) (i32.const 1))))
               (global.set $in_len (i32.sub (global.get $in_len) (i32.add (local.get $i) (i32.const 1))))
-              ;; Echo it, as a terminal does, and run it.
-              (call $out (i32.const 4096) (global.get $line_len))
-              (call $nl)
               (if (call $run_command)
                 (then
                   ;; A program took over the terminal; wait for it.

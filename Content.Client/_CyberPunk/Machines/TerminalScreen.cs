@@ -14,13 +14,14 @@ namespace Content.Client._CyberPunk.Machines;
 
 /// <summary>
 /// A machine's terminal screen: a grid of <see cref="Columns"/> by <see cref="Rows"/> monospace characters
-/// showing the end of its output, which the mouse wheel scrolls back through. In raw mode it takes the keyboard
-/// while it has focus and reports every key with <see cref="OnKey"/>.
+/// showing the end of its output, which the mouse wheel scrolls back through. It takes the keyboard while it
+/// has focus and reports every key with <see cref="OnKeys"/>.
 /// </summary>
 public sealed partial class TerminalScreen : Control
 {
     [Dependency] private IInputManager _input = default!;
     [Dependency] private IResourceCache _cache = default!;
+    [Dependency] private IGameTiming _timing = default!;
 
     /// <summary>The terminal's size, as programs see it through <c>term_size</c>.</summary>
     public const int Columns = 80;
@@ -35,14 +36,15 @@ public sealed partial class TerminalScreen : Control
     private readonly Font _font;
     private readonly List<string> _lines = new();
     private string _screen = "";
-    private bool _raw;
     private int _scroll;
     private TimeSpan _blink;
+    private readonly List<int> _pressed = new();
+    private GameTick _sentTick;
 
     /// <summary>
-    /// A key pressed in raw mode, as one of the codes in <see cref="TerminalKeys"/>.
+    /// Keys pressed, in order, as codes from <see cref="TerminalKeys"/>.
     /// </summary>
-    public event Action<int>? OnKey;
+    public event Action<int[]>? OnKeys;
 
     public TerminalScreen()
     {
@@ -56,11 +58,6 @@ public sealed partial class TerminalScreen : Control
     }
 
     /// <summary>
-    /// Whether the terminal is in raw mode.
-    /// </summary>
-    public bool Raw => _raw;
-
-    /// <summary>
     /// Everything the terminal has kept of its output.
     /// </summary>
     public string Text => _screen;
@@ -68,10 +65,9 @@ public sealed partial class TerminalScreen : Control
     /// <summary>
     /// Replaces everything on the screen.
     /// </summary>
-    public void SetScreen(string screen, bool raw)
+    public void SetScreen(string screen)
     {
         _screen = screen;
-        _raw = raw;
         Refresh();
     }
 
@@ -80,7 +76,7 @@ public sealed partial class TerminalScreen : Control
     /// </summary>
     public void AddOutput(string text)
     {
-        _screen = TerminalText.Apply(_screen, ref _raw, text);
+        _screen = TerminalText.Apply(_screen, text);
         Refresh();
     }
 
@@ -166,7 +162,7 @@ public sealed partial class TerminalScreen : Control
         }
 
         // A block cursor after the last character, blinking while the screen has the keyboard.
-        if (_raw && _scroll == 0 && HasKeyboardFocus() && _blink.TotalSeconds % 1 < 0.5 && _lines.Count > 0)
+        if (_scroll == 0 && HasKeyboardFocus() && _blink.TotalSeconds % 1 < 0.5 && _lines.Count > 0)
         {
             var column = Math.Min(Columns - 1, _lines[^1].EnumerateRunes().Count());
             var top = padding + (last - first) * lineHeight;
@@ -178,6 +174,20 @@ public sealed partial class TerminalScreen : Control
     {
         base.FrameUpdate(args);
         _blink += TimeSpan.FromSeconds(args.DeltaSeconds);
+
+        // Messages sent in the same tick can reach the server in any order, so keys go at most once a tick.
+        if (_pressed.Count > 0 && _timing.CurTick != _sentTick)
+        {
+            _sentTick = _timing.CurTick;
+            OnKeys?.Invoke(_pressed.ToArray());
+            _pressed.Clear();
+        }
+    }
+
+    private void Press(int key)
+    {
+        _pressed.Add(key);
+        _scroll = 0;
     }
 
     protected override void MouseWheel(GUIMouseWheelEventArgs args)
@@ -202,20 +212,19 @@ public sealed partial class TerminalScreen : Control
     }
 
     /// <summary>
-    /// In raw mode, takes the keys a program needs before the game or the UI can bind them to something else,
-    /// such as Ctrl+C or the arrow keys. Printable characters come through <see cref="TextEntered"/>.
+    /// Takes the keys a program needs before the game or the UI can bind them to something else, such as
+    /// Ctrl+C or the arrow keys. Printable characters come through <see cref="TextEntered"/>.
     /// </summary>
     private void OnFirstChanceKey(KeyEventArgs args, KeyEventType type)
     {
-        if (type == KeyEventType.Up || !_raw || !HasKeyboardFocus())
+        if (type == KeyEventType.Up || !HasKeyboardFocus())
             return;
 
         if (KeyCode(args) is not { } code)
             return;
 
         args.Handle();
-        _scroll = 0;
-        OnKey?.Invoke(code);
+        Press(code);
     }
 
     private static int? KeyCode(KeyEventArgs args)
@@ -248,15 +257,10 @@ public sealed partial class TerminalScreen : Control
     {
         base.TextEntered(args);
 
-        if (!_raw)
-            return;
-
         foreach (var rune in args.TextEnteredEvent.Text.EnumerateRunes())
         {
             if (TerminalKeys.Valid(rune.Value))
-                OnKey?.Invoke(rune.Value);
+                Press(rune.Value);
         }
-
-        _scroll = 0;
     }
 }

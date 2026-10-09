@@ -1,18 +1,29 @@
+using System.Linq;
 using Content.Client._CyberPunk.Machines;
 using Content.IntegrationTests.Tests.Interaction;
 using Content.Server._CyberPunk.Machines;
 using Content.Server._CyberPunk.Wasm;
 using Content.Shared._CyberPunk.Machines;
 using Robust.Shared.GameObjects;
+using Robust.Shared.Input;
 
 namespace Content.IntegrationTests.Tests._CyberPunk;
 
 /// <summary>
-/// A programmable computer's terminal window shows its screen, sends what's typed, follows output from anyone
-/// else at the machine, and passes keys straight to a program in raw mode.
+/// A programmable computer's terminal window shows its screen, sends every key to the machine, follows output
+/// from anyone else at the machine, and shows the whole screen again when it's reopened.
 /// </summary>
 public sealed class MachineTerminalTest : InteractionTest
 {
+    /// <summary>
+    /// Presses each key of <paramref name="text"/> at the open terminal, then Enter.
+    /// </summary>
+    private async Task TypeLine(string text)
+    {
+        var keys = text.Select(c => (int) c).Append(TerminalKeys.Enter).ToArray();
+        await SendBui(MachineTerminalUiKey.Key, new MachineTerminalKeysMessage(keys));
+    }
+
     [Test]
     public async Task TerminalShowsScreenAndTakesInput()
     {
@@ -24,12 +35,10 @@ public sealed class MachineTerminalTest : InteractionTest
         await Interact();
         var window = GetWindow<MachineTerminalWindow>();
         Assert.That(window.Screen.Text, Does.Contain(StubOs.Name));
-        Assert.That(window.Input.Visible, Is.True);
 
         // A typed line runs on the machine, and its output reaches the window.
-        await SendBui(MachineTerminalUiKey.Key, new MachineTerminalLineMessage("echo first line"));
-        await RunTicks(15);
-        Assert.That(window.Screen.Text, Does.Contain("first line"));
+        await TypeLine("echo first line");
+        Assert.That(window.Screen.Text, Does.Contain("echo first line\nfirst line\n"));
 
         // Someone else at the machine types too: their output shows up here as well, and the window's copy of
         // the screen matches the machine's.
@@ -45,23 +54,37 @@ public sealed class MachineTerminalTest : InteractionTest
         Assert.That(window.Screen.Text, Does.Contain("from someone else"));
         Assert.That(window.Screen.Text, Is.EqualTo(SEntMan.GetComponent<WasmMachineComponent>(target).Screen));
 
-        // A program in raw mode gets each key as it's pressed, and the window swaps its input line for keys.
-        await SendBui(MachineTerminalUiKey.Key, new MachineTerminalLineMessage("build keys.wat"));
-        await SendBui(MachineTerminalUiKey.Key, new MachineTerminalLineMessage("run keys.wasm"));
-        await RunTicks(15);
-        Assert.That(window.Screen.Raw, Is.True);
-        Assert.That(window.Input.Visible, Is.False);
-
-        await SendBui(MachineTerminalUiKey.Key, new MachineTerminalKeyMessage('a'));
-        await SendBui(MachineTerminalUiKey.Key, new MachineTerminalKeyMessage(TerminalKeys.Up));
-        await RunTicks(15);
+        // A program in raw mode gets each key as it's pressed.
+        await TypeLine("build keys.wat");
+        await TypeLine("run keys.wasm");
+        await SendBui(MachineTerminalUiKey.Key, new MachineTerminalKeysMessage(['a', TerminalKeys.Up]));
         Assert.That(window.Screen.Text, Does.Contain("key 97\n"));
         Assert.That(window.Screen.Text, Does.Contain($"key {TerminalKeys.Up}\n"));
 
-        // Ctrl+Q ends the program, and the terminal goes back to lines.
-        await SendBui(MachineTerminalUiKey.Key, new MachineTerminalKeyMessage(TerminalKeys.Ctrl('q')));
+        // Ctrl+Q ends the program, and keys edit a line for the shell again.
+        await SendBui(MachineTerminalUiKey.Key, new MachineTerminalKeysMessage([TerminalKeys.Ctrl('q')]));
+        await TypeLine("echo back");
+        Assert.That(window.Screen.Text, Does.EndWith("echo back\nback\n$ "));
+    }
+
+    [Test]
+    public async Task TerminalKeepsScreenWhenReopened()
+    {
+        await SpawnTarget("ComputerProgrammable");
+        ToggleNeedPower();
+        await RunTicks(30);
+
+        // The client opens the terminal itself, as a player clicking on it does.
+        await PressKey(EngineKeyFunctions.Use);
         await RunTicks(15);
-        Assert.That(window.Screen.Raw, Is.False);
-        Assert.That(window.Input.Visible, Is.True);
+        await TypeLine("echo kept output");
+        await CloseBui(MachineTerminalUiKey.Key);
+        Assert.That(IsUiOpen(MachineTerminalUiKey.Key), Is.False);
+
+        await PressKey(EngineKeyFunctions.Use);
+        await RunTicks(15);
+        var window = GetWindow<MachineTerminalWindow>();
+        Assert.That(window.Screen.Text, Does.Contain(StubOs.Name));
+        Assert.That(window.Screen.Text, Does.Contain("kept output"));
     }
 }

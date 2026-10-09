@@ -142,6 +142,7 @@ public sealed class Vm : IDisposable
         _io.Flash = null;
         _io.Raw = false;
         _io.Keys.Clear();
+        _io.Editor.Clear();
         State = VmState.Off;
         _io.Output.Append("\n[power lost]\n");
     }
@@ -189,30 +190,45 @@ public sealed class Vm : IDisposable
     #region Terminal
 
     /// <summary>
-    /// Queues a line of typed input for the program in front. Ignored in raw mode, where keys come one by one
-    /// instead.
+    /// Types a whole line and Enter, for the program in front. Ignored in raw mode.
     /// </summary>
     public void TypeLine(string line)
     {
         if (State != VmState.Running || _io.Raw)
             return;
 
+        _io.Editor.Type(line);
+        QueueLine(_io.Editor.Submit());
+    }
+
+    /// <summary>
+    /// A key pressed at the terminal. In raw mode it goes to the program as it is, dropped when too many are
+    /// waiting; otherwise it edits the line, which goes to the program on Enter.
+    /// </summary>
+    public void TypeKey(int key)
+    {
+        if (State != VmState.Running || !TerminalKeys.Valid(key))
+            return;
+
+        if (!_io.Raw)
+        {
+            if (_io.Editor.Key(key) is { } line)
+                QueueLine(line);
+        }
+        else if (_io.Keys.Count < WasmHost.KeyLimit)
+        {
+            _io.Keys.Enqueue(key);
+        }
+    }
+
+    private void QueueLine(string line)
+    {
         var bytes = System.Text.Encoding.UTF8.GetBytes(line);
         if (_io.Input.Count + bytes.Length >= WasmHost.InputLimit)
             return;
 
         _io.Input.AddRange(bytes);
         _io.Input.Add((byte) '\n');
-    }
-
-    /// <summary>
-    /// A key pressed at the terminal, for a program in raw mode. Dropped otherwise, or when too many are
-    /// waiting.
-    /// </summary>
-    public void TypeKey(int key)
-    {
-        if (State == VmState.Running && _io.Raw && _io.Keys.Count < WasmHost.KeyLimit && TerminalKeys.Valid(key))
-            _io.Keys.Enqueue(key);
     }
 
     /// <summary>
