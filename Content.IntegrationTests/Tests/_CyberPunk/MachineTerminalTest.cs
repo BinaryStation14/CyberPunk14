@@ -109,6 +109,40 @@ public sealed class MachineTerminalTest : InteractionTest
     }
 
     [Test]
+    public async Task TheCalculatorExampleCalculates()
+    {
+        await SpawnTarget("ComputerProgrammable");
+        ToggleNeedPower();
+        await RunTicks(30);
+
+        await Interact();
+        var window = GetWindow<MachineTerminalWindow>();
+        await TypeLine("build examples/calc.wire");
+        await TypeLine("run examples/calc.wasm");
+        await RunTicks(5);
+        Assert.That(window.ShowingProgram, Is.True);
+
+        // 12 + 3 = 15, then 7 / 0 is an error that C clears.
+        var target = SEntMan.GetEntity(Target!.Value);
+        string Display() => SEntMan.GetComponent<WasmMachineComponent>(target).Vm!.Ui!.Children[1].Text;
+        foreach (var (button, shows) in new[]
+                 {
+                     ("num1", "1"), ("num2", "12"), ("add", "12"), ("num3", "3"), ("eq", "15"),
+                     ("num7", "7"), ("div", "7"), ("num0", "0"), ("eq", "Error"), ("clear", "0"),
+                 })
+        {
+            await SendBui(MachineTerminalUiKey.Key, new MachineTerminalUiEventMessage(button, ProgramUiEventKind.Click, ""));
+            await RunTicks(3);
+            Assert.That(Display(), Is.EqualTo(shows), $"after {button}");
+        }
+
+        await SendBui(MachineTerminalUiKey.Key, new MachineTerminalUiEventMessage("quit", ProgramUiEventKind.Click, ""));
+        await RunTicks(5);
+        Assert.That(window.ShowingProgram, Is.False);
+        Assert.That(window.Screen.Text, Does.Contain("calc: bye\n"));
+    }
+
+    [Test]
     public async Task TerminalKeepsScreenWhenReopened()
     {
         await SpawnTarget("ComputerProgrammable");
