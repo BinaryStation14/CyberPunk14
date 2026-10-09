@@ -118,8 +118,9 @@ public sealed class CyberspaceGenerationTest
     {
         var layout = Layout();
         var graph = Graph(layout);
-        Assert.That(CyberRegionGenerator.Generate(3, layout, graph),
-            Is.EqualTo(CyberRegionGenerator.Generate(3, layout, graph)));
+        var first = CyberRegionGenerator.Generate(3, layout, graph);
+        var second = CyberRegionGenerator.Generate(3, layout, graph);
+        Assert.That(second, Is.EqualTo(first));
 
         var sizes = new HashSet<int>();
         for (var seed = 0UL; seed < 20; seed++)
