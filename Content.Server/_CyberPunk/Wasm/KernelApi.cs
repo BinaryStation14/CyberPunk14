@@ -30,6 +30,11 @@ internal sealed class KernelApi
     /// </summary>
     public const int MaxTitle = 64;
 
+    /// <summary>
+    /// The longest request a program can make of a machine with a UI, its arguments included.
+    /// </summary>
+    public const int MaxDeviceRequest = 16 * 1024;
+
     private readonly Linker _linker;
     private readonly HashSet<string> _linked = new();
 
@@ -120,6 +125,11 @@ internal sealed class KernelApi
     }
 
     private void Def(string name, CallerFunc<int, int, int, int, int> fn)
+    {
+        foreach (var m in ModulesFor(name)) _linker.DefineFunction(m, name, fn);
+    }
+
+    private void Def(string name, CallerFunc<int, int, int, int, int, int> fn)
     {
         foreach (var m in ModulesFor(name)) _linker.DefineFunction(m, name, fn);
     }
@@ -556,6 +566,31 @@ internal sealed class KernelApi
             }
 
             return io.Disk.Write(output, bytes) == DiskError.None ? bytes.Length : -4;
+        });
+
+        // A machine with a UI on the network answers a request (WasmMachineSystem.Devices.cs).
+        Def("dev_request", (c, addr, req, len, buf, cap) =>
+        {
+            var io = Io(c);
+            var to = (uint) addr;
+            if (!io.Is(DeviceKind.Computer)
+                || io.Devices is not { } devices
+                || io.Address == null
+                || io.Reachable is not { } reachable
+                || !reachable.Contains(to))
+            {
+                return -1;
+            }
+
+            if ((uint) len > MaxDeviceRequest)
+                return WriteText(c, buf, cap, $"!the request is too long ({MaxDeviceRequest / 1024} KiB at most)");
+
+            if (io.DeviceRequests >= MachineIo.DeviceRequestsPerTick)
+                return WriteText(c, buf, cap, $"!too many requests this tick ({MachineIo.DeviceRequestsPerTick} at most)");
+
+            io.DeviceRequests++;
+            var answer = devices.Request(to, ReadText(c, req, len));
+            return answer == null ? -1 : WriteText(c, buf, cap, answer);
         });
 
         Def("flash", (c, addr, name, len) =>

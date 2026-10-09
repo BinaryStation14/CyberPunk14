@@ -234,6 +234,37 @@
                         label = host + " " + names[host]
                     print("  " + label, found[host])
                 sys.exit(0)
+      examples/machines.wire: |
+        # machines.wire: lists the machines on this building's network that people
+        # work through a window (vending machines, consoles and the like), with
+        # the calls each one takes (man dev).
+        #     run examples/machines.bin
+
+        queue = []
+        seen = 0
+
+        if net.address() == None:
+            print("machines: this computer has no network address")
+            sys.exit(1)
+        else:
+            queue = sorted(net.neighbours())
+
+        def tick():
+            # A few a tick: a computer can only make so many requests at once.
+            asked = 0
+            while asked < 4 and len(queue) > 0:
+                host = queue.pop(0)
+                asked += 1
+                info = dev.info(host)
+                if info != None:
+                    seen += 1
+                    print(host, info["name"], "(" + str(info["kind"]) + ")")
+                    for call in info["calls"].keys():
+                        print("    " + call, info["calls"][call])
+            if len(queue) == 0:
+                if seen == 0:
+                    print("machines: none on this network")
+                sys.exit(0)
       examples/calc.wire: |
         # calc.wire: a calculator with buttons, to show how a program draws its
         # own UI (man ui). The terminal window shows the buttons in place of the

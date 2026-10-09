@@ -15,7 +15,8 @@ namespace Content.Server._CyberPunk.Machines;
 /// switches and routers, and everything joined that way is one local network. A network works when a router
 /// with power is on it: the router gives each machine an address, joins the network to every other routed
 /// network on the same map, and keeps the directory of hostnames the machines publish. Machines on a network
-/// with no router have no address and can't send anything.
+/// with no router have no address and can't send anything. Machines with a UI of their own get addresses too
+/// (WasmMachineSystem.Devices.cs).
 /// </summary>
 /// <remarks>
 /// The network is worked out again only when something changes: cable or a machine joins or leaves, a hub
@@ -217,8 +218,8 @@ public sealed partial class WasmMachineSystem
             }
         }
 
-        // The machines on each served network, and those on none.
-        var members = new Dictionary<object, List<Entity<WasmMachineComponent>>>();
+        // The machines on each served network, and those on none, then the machines with a UI on its cable.
+        var members = new Dictionary<object, List<EntityUid>>();
         var unconnected = new List<Entity<WasmMachineComponent>>();
         var machines = EntityQueryEnumerator<WasmMachineComponent>();
         while (machines.MoveNext(out var uid, out var machine))
@@ -229,9 +230,9 @@ public sealed partial class WasmMachineSystem
             if (NetworkOf(uid, machine.DataNode) is { } network && served.ContainsKey(network))
             {
                 if (!members.TryGetValue(network, out var list))
-                    members[network] = list = new List<Entity<WasmMachineComponent>>();
+                    members[network] = list = new List<EntityUid>();
 
-                list.Add((uid, machine));
+                list.Add(uid);
             }
             else
             {
@@ -239,15 +240,17 @@ public sealed partial class WasmMachineSystem
             }
         }
 
+        FindDevices(served, members);
+
         // Addresses: a machine keeps the one it has while it stays, and a newcomer gets the lowest free one.
-        var lans = new List<(MapId Map, List<(uint Address, Entity<WasmMachineComponent> Machine)> Hosts)>();
+        var lans = new List<(MapId Map, List<(uint Address, EntityUid Machine)> Hosts)>();
         foreach (var (network, router) in served)
         {
-            var list = members.GetValueOrDefault(network) ?? new List<Entity<WasmMachineComponent>>();
-            list.Sort((a, b) => a.Owner.CompareTo(b.Owner));
+            var list = members.GetValueOrDefault(network) ?? new List<EntityUid>();
+            list.Sort();
 
             var leases = router.Comp.Leases;
-            var here = list.Select(m => m.Owner).ToHashSet();
+            var here = list.ToHashSet();
             foreach (var gone in leases.Keys.Where(m => !here.Contains(m)).ToList())
             {
                 leases.Remove(gone);
@@ -255,7 +258,7 @@ public sealed partial class WasmMachineSystem
 
             var used = leases.Values.ToHashSet();
             var map = Transform(router).MapID;
-            var hosts = new List<(uint, Entity<WasmMachineComponent>)>();
+            var hosts = new List<(uint, EntityUid)>();
             foreach (var machine in list)
             {
                 if (!leases.TryGetValue(machine, out var host))
@@ -269,7 +272,9 @@ public sealed partial class WasmMachineSystem
                     // The network is full.
                     if (host == 255)
                     {
-                        unconnected.Add(machine);
+                        if (TryComp<WasmMachineComponent>(machine, out var full))
+                            unconnected.Add((machine, full));
+
                         continue;
                     }
 
@@ -298,8 +303,8 @@ public sealed partial class WasmMachineSystem
 
             set.Add(address);
 
-            // Two machines with one name: the lower address has it.
-            var name = Comp<WasmMachineComponent>(machine).Hostname;
+            // Two machines with one name: the lower address has it. Machines with a UI have no names.
+            var name = CompOrNull<WasmMachineComponent>(machine)?.Hostname ?? "";
             if (name.Length > 0)
                 directories[map].TryAdd(name, address);
         }
@@ -308,8 +313,11 @@ public sealed partial class WasmMachineSystem
         {
             foreach (var (address, machine) in hosts)
             {
+                if (CompOrNull<WasmMachineComponent>(machine)?.Vm is not { } vm)
+                    continue;
+
                 var neighbours = hosts.Select(h => h.Address).Where(a => a != address).OrderBy(a => a).ToList();
-                machine.Comp.Vm!.SetNetwork(address, reachable[map], neighbours, directories[map]);
+                vm.SetNetwork(address, reachable[map], neighbours, directories[map]);
             }
         }
 

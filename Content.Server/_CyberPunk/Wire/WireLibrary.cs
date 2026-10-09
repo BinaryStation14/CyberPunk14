@@ -48,7 +48,7 @@ public static class WireLibrary
 
     public static readonly IReadOnlyList<string> Modules = new[]
     {
-        "term", "fs", "net", "sys", "ui", "door", "camera", "ice", "deck", "body",
+        "term", "fs", "net", "sys", "ui", "dev", "door", "camera", "ice", "deck", "body",
     };
 
     public static readonly IReadOnlyList<WireFunction> ModuleFunctions = new WireFunction[]
@@ -125,6 +125,12 @@ public static class WireLibrary
             "Clears the screen (24 lines of 80 characters)."),
         new("term.title", "term.title(text)", 1, 1, "computer",
             "Names the terminal window while this program is in front (64 characters at most); \"\" gives it back to the program under it, or the OS. False if this program is a background job."),
+        new("dev.info", "dev.info(machine)", 1, 1, "computer",
+            "What a machine on the network with a UI is (an address or hostname): a dict of its \"name\", its \"kind\" and the \"calls\" it takes, each with the arguments it wants. None if it can't be reached; sys.error() says why."),
+        new("dev.state", "dev.state(machine)", 1, 1, "computer",
+            "What a machine's UI would show right now, as a dict. None if it can't be reached, has no power or turns this computer away; sys.error() says why."),
+        new("dev.call", "dev.call(machine, call) / dev.call(machine, call, args)", 2, 3, "computer",
+            "Does what pressing something on a machine's UI does: a call from dev.info(), with a dict of its arguments. True if the machine took it, or False; sys.error() says why."),
         new("ui.show", "ui.show(widget)", 1, 1, "computer",
             "Shows a UI in the terminal window in place of the text while this program is in front, built from the widgets below (man ui). Showing the same one again costs nothing. False if this program is a background job."),
         new("ui.events", "ui.events()", 0, 0, "computer",

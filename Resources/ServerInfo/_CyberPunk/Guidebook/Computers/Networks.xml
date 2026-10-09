@@ -30,4 +30,12 @@
   - [mono]net.neighbours()[/mono] lists the other machines on the same network.
 
   The examples folder has [mono]ping.wire[/mono], [mono]echo_server.wire[/mono] and [mono]netscan.wire[/mono] to start from.
+
+  ## Working other machines
+  Any machine people work through a window, like a vending machine or a console, joins the network when it stands on data cable, and gets an address of its own. A program on a computer can work it as if someone stood at it, with the [bold]dev[/bold] module:
+  - [mono]dev.info(host)[/mono] says what the machine is, and the calls it takes with their arguments.
+  - [mono]dev.state(host)[/mono] reads what its window shows.
+  - [mono]dev.call(host, call, args)[/mono] does what pressing something in its window does, like [mono]dev.call(host, "vending_machine_eject", {"type": "Regular", "id": "DrinkColaCan"})[/mono].
+
+  The computer has no ID of its own, so a machine that needs access turns it away, and a machine without power doesn't answer. [mono]examples/machines.wire[/mono] lists the machines on a network and their calls; [mono]man dev[/mono] has the rest.
 </Document>

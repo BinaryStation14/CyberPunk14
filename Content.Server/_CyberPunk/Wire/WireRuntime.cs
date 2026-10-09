@@ -89,6 +89,7 @@ internal static partial class WireRuntime
   (import "sb_v8" "term_key" (func $term_key (result i32)))
   (import "sb_v8" "term_clear" (func $term_clear))
   (import "sb_v9" "term_title" (func $term_title (param i32 i32) (result i32)))
+  (import "sb_v10" "dev_request" (func $dev_request (param i32 i32 i32 i32 i32) (result i32)))
   (import "sb_v8" "exit" (func $exit (param i32)))
   (import "sb_v8" "reboot" (func $reboot))
   (import "sb_v8" "ui_set" (func $ui_set (param i32 i32 i32 i32) (result i32)))
@@ -174,7 +175,7 @@ internal static partial class WireRuntime
 
   (elem declare func $args $fs_list $job_list $camera_names $request_name $request_holding $request_cards
     $ice_runners $ice_nodes $ice_neighbours $deck_targets $body_vitals $net_neighbours
-    $net_hostname $net_hosts $fs_read_fill $man_fill $scaffold_fill $ui_event)
+    $net_hostname $net_hosts $fs_read_fill $man_fill $scaffold_fill $ui_event $dev_fill)
 
   ;; ---- Values
 
@@ -1984,6 +1985,168 @@ internal static partial class WireRuntime
     (call $only (i32.const 0) (str "term.title"))
     (call $bool (i32.eqz (call $term_title (i32.const 1024)
       (i32.sub (call $put (call $text_arg (local.get $v) (str "the title")) (i32.const 1024)) (i32.const 1024))))))
+
+  ;; ---- dev
+
+  ;; The machine dev functions are asking, for dev_fill.
+  (global $dev_addr (mut i32) (i32.const 0))
+  ;; A machine's answer being read back into values, and how far in.
+  (global $lit (mut (ref null $Str)) (ref.null none))
+  (global $lit_at (mut i32) (i32.const 0))
+
+  (func $dev_fill (type $Fill) (param $buf i32) (param $cap i32) (result i32)
+    (call $dev_request (global.get $dev_addr) (global.get $fill_name) (global.get $fill_len) (local.get $buf) (local.get $cap)))
+
+  ;; The next byte of the answer, or -1 at its end.
+  (func $lit_peek (result i32)
+    (if (result i32) (i32.lt_u (global.get $lit_at) (call $slen (global.get $lit)))
+      (then (call $byte (global.get $lit) (global.get $lit_at)))
+      (else (i32.const -1))))
+  (func $lit_next (result i32)
+    (local $c i32)
+    (local.set $c (call $lit_peek))
+    (global.set $lit_at (i32.add (global.get $lit_at) (i32.const 1)))
+    (local.get $c))
+  (func $lit_skip
+    (local $c i32)
+    (block $done (loop $each
+      (local.set $c (call $lit_peek))
+      (br_if $done (i32.eqz (i32.or (i32.eq (local.get $c) (i32.const 32))
+        (i32.and (i32.ge_s (local.get $c) (i32.const 9)) (i32.le_s (local.get $c) (i32.const 13))))))
+      (global.set $lit_at (i32.add (global.get $lit_at) (i32.const 1)))
+      (br $each))))
+  ;; Takes `w` if the answer goes on with it.
+  (func $lit_word (param $w (ref $Str)) (result i32)
+    (local $i i32) (local $n i32)
+    (local.set $n (call $slen (local.get $w)))
+    (if (i32.gt_u (i32.add (global.get $lit_at) (local.get $n)) (call $slen (global.get $lit))) (then (return (i32.const 0))))
+    (block $done (loop $each
+      (br_if $done (i32.ge_u (local.get $i) (local.get $n)))
+      (if (i32.ne (call $byte (global.get $lit) (i32.add (global.get $lit_at) (local.get $i))) (call $byte (local.get $w) (local.get $i)))
+        (then (return (i32.const 0))))
+      (local.set $i (i32.add (local.get $i) (i32.const 1)))
+      (br $each)))
+    (global.set $lit_at (i32.add (global.get $lit_at) (local.get $n)))
+    (i32.const 1))
+  (func $lit_bad
+    (call $fail (str "the machine's answer didn't make sense")))
+  ;; One value of the answer: None, True, False, a number, "text", a [list] or a {dict}.
+  (func $lit_value (param $depth i32) (result eqref)
+    (local $c i32) (local $neg i32) (local $n i64) (local $digits i32)
+    (local $l (ref null $List)) (local $d eqref) (local $k eqref) (local $b (ref null $Buf))
+    (if (i32.gt_u (local.get $depth) (i32.const 16)) (then (call $lit_bad)))
+    (call $lit_skip)
+    (if (call $lit_word (str "None")) (then (return (ref.null none))))
+    (if (call $lit_word (str "True")) (then (return (global.get $true))))
+    (if (call $lit_word (str "False")) (then (return (global.get $false))))
+    (local.set $c (call $lit_next))
+    ;; "text"
+    (if (i32.eq (local.get $c) (i32.const 34))
+      (then
+        (local.set $b (call $buf))
+        (block $end (loop $each
+          (local.set $c (call $lit_next))
+          (if (i32.lt_s (local.get $c) (i32.const 0)) (then (call $lit_bad)))
+          (br_if $end (i32.eq (local.get $c) (i32.const 34)))
+          (if (i32.eq (local.get $c) (i32.const 92))
+            (then
+              (local.set $c (call $lit_next))
+              (if (i32.lt_s (local.get $c) (i32.const 0)) (then (call $lit_bad)))
+              (if (i32.eq (local.get $c) (i32.const 110)) (then (local.set $c (i32.const 10))))
+              (if (i32.eq (local.get $c) (i32.const 116)) (then (local.set $c (i32.const 9))))
+              (if (i32.eq (local.get $c) (i32.const 114)) (then (local.set $c (i32.const 13))))
+              (if (i32.eq (local.get $c) (i32.const 48)) (then (local.set $c (i32.const 0))))))
+          (call $buf_byte (ref.as_non_null (local.get $b)) (local.get $c))
+          (br $each)))
+        (return (call $buf_done (ref.as_non_null (local.get $b))))))
+    ;; [list]
+    (if (i32.eq (local.get $c) (i32.const 91))
+      (then
+        (local.set $l (call $list_new))
+        (call $lit_skip)
+        (if (i32.eq (call $lit_peek) (i32.const 93))
+          (then (drop (call $lit_next)) (return (local.get $l))))
+        (loop $each
+          (call $push (ref.as_non_null (local.get $l)) (call $lit_value (i32.add (local.get $depth) (i32.const 1))))
+          (call $lit_skip)
+          (local.set $c (call $lit_next))
+          (br_if $each (i32.eq (local.get $c) (i32.const 44)))
+          (if (i32.ne (local.get $c) (i32.const 93)) (then (call $lit_bad))))
+        (return (local.get $l))))
+    ;; {dict}
+    (if (i32.eq (local.get $c) (i32.const 123))
+      (then
+        (local.set $d (call $dict_new))
+        (call $lit_skip)
+        (if (i32.eq (call $lit_peek) (i32.const 125))
+          (then (drop (call $lit_next)) (return (local.get $d))))
+        (loop $each
+          (local.set $k (call $lit_value (i32.add (local.get $depth) (i32.const 1))))
+          (call $lit_skip)
+          (if (i32.ne (call $lit_next) (i32.const 58)) (then (call $lit_bad)))
+          (call $dict_set (local.get $d) (local.get $k) (call $lit_value (i32.add (local.get $depth) (i32.const 1))))
+          (call $lit_skip)
+          (local.set $c (call $lit_next))
+          (br_if $each (i32.eq (local.get $c) (i32.const 44)))
+          (if (i32.ne (local.get $c) (i32.const 125)) (then (call $lit_bad))))
+        (return (local.get $d))))
+    ;; A number.
+    (if (i32.eq (local.get $c) (i32.const 45))
+      (then (local.set $neg (i32.const 1)) (local.set $c (call $lit_next))))
+    (block $end (loop $each
+      (br_if $end (i32.or (i32.lt_s (local.get $c) (i32.const 48)) (i32.gt_s (local.get $c) (i32.const 57))))
+      (local.set $n (i64.add (i64.mul (local.get $n) (i64.const 10)) (i64.extend_i32_u (i32.sub (local.get $c) (i32.const 48)))))
+      (local.set $digits (i32.add (local.get $digits) (i32.const 1)))
+      (local.set $c (call $lit_peek))
+      (if (i32.and (i32.ge_s (local.get $c) (i32.const 48)) (i32.le_s (local.get $c) (i32.const 57)))
+        (then (drop (call $lit_next))))
+      (br $each)))
+    (if (i32.eqz (local.get $digits)) (then (call $lit_bad)))
+    (call $int (if (result i64) (local.get $neg) (then (i64.sub (i64.const 0) (local.get $n))) (else (local.get $n)))))
+
+  ;; Asks the machine `host` something. Its answer read back as a value, with sys.error() cleared; or null,
+  ;; with sys.error() saying why.
+  (func $dev_ask (param $host eqref) (param $request (ref $Str)) (result eqref)
+    (local $name (ref null $Str)) (local $a i64) (local $end i32) (local $s (ref null $Str)) (local $v eqref)
+    (local.set $name (call $text_arg (local.get $host) (str "the machine")))
+    (local.set $a (call $lookup (ref.as_non_null (local.get $name))))
+    (if (i64.lt_s (local.get $a) (i64.const 0))
+      (then (drop (call $failed (call $cat (str "there's no machine called ") (local.get $name))))
+        (return (ref.null none))))
+    (global.set $dev_addr (i32.wrap_i64 (local.get $a)))
+    (local.set $end (call $put (local.get $request) (i32.const 1024)))
+    (global.set $fill_name (i32.const 1024))
+    (global.set $fill_len (i32.sub (local.get $end) (i32.const 1024)))
+    (local.set $s (call $fill (ref.func $dev_fill) (local.get $end)))
+    (if (ref.is_null (local.get $s))
+      (then (drop (call $failed (call $cat (local.get $name) (str " doesn't answer"))))
+        (return (ref.null none))))
+    (if (if (result i32) (call $slen (local.get $s))
+          (then (i32.eq (call $byte (local.get $s) (i32.const 0)) (i32.const 33)))
+          (else (i32.const 0)))
+      (then (drop (call $failed (call $slice (call $bytes (local.get $s)) (i32.const 1)
+          (i32.sub (call $slen (local.get $s)) (i32.const 1)))))
+        (return (ref.null none))))
+    (global.set $lit (local.get $s))
+    (global.set $lit_at (i32.const 0))
+    (local.set $v (call $lit_value (i32.const 0)))
+    (global.set $lit (ref.null none))
+    (call $succeeded (local.get $v)))
+  (func $dev.info (param $h eqref) (result eqref)
+    (call $only (i32.const 0) (str "dev.info"))
+    (call $dev_ask (local.get $h) (str "info")))
+  (func $dev.state (param $h eqref) (result eqref)
+    (call $only (i32.const 0) (str "dev.state"))
+    (call $dev_ask (local.get $h) (str "state")))
+  (func $dev.call (param $h eqref) (param $name eqref) (param $args eqref) (result eqref)
+    (local $request (ref null $Str))
+    (call $only (i32.const 0) (str "dev.call"))
+    (if (i32.eqz (i32.or (ref.is_null (local.get $args)) (call $is_dict (local.get $args))))
+      (then (call $fail (call $cat (str "the arguments must be a dict, not ") (call $kind (local.get $args))))))
+    (local.set $request (call $cat4 (str "call ") (call $text_arg (local.get $name) (str "the call")) (str " ")
+      (if (result (ref $Str)) (ref.is_null (local.get $args)) (then (str "{}")) (else (call $repr (local.get $args))))))
+    (drop (call $dev_ask (local.get $h) (ref.as_non_null (local.get $request))))
+    (call $bool (ref.is_null (global.get $error))))
 
   ;; ---- door
 

@@ -466,6 +466,15 @@ public sealed class Vm : IDisposable
     }
 
     /// <summary>
+    /// The machines with a UI that this machine's programs can make requests of (<c>dev_request</c>).
+    /// </summary>
+    public IMachineDevices? Devices
+    {
+        get => _io.Devices;
+        set => _io.Devices = value;
+    }
+
+    /// <summary>
     /// The name the machine goes by on the network, or empty. Programs set it with <c>net_set_hostname</c>; it
     /// is kept through reboots.
     /// </summary>
@@ -663,6 +672,7 @@ public sealed class Vm : IDisposable
         _io.ClockMs += dtMs;
         _io.OutputThisTick = 0;
         _io.Truncated = false;
+        _io.DeviceRequests = 0;
 
         switch (State)
         {
