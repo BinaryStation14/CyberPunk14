@@ -46,7 +46,7 @@ public static class WireManual
 
             A program's code at the top level runs once when it starts; then the
             machine calls its hooks (man hooks). Start one with `new NAME`, build it
-            with `build NAME.wire` and run it with `run NAME.wasm`. Mistakes are
+            with `build NAME.wire` and run it with `run NAME.bin`. Mistakes are
             reported with their line, when you build or as it runs.
 
             BUILT-IN FUNCTIONS
@@ -203,7 +203,7 @@ public static class WireManual
 
     private const string Computer = """
         # A Wire program for a computer.
-        # Build it with `build FILE.wire`, then `run FILE.wasm`.
+        # Build it with `build FILE.wire`, then `run FILE.bin`.
         # `man wire` explains the language, `man modules` what you can call.
 
         # Code at the top level runs once, when the program starts.
@@ -222,7 +222,7 @@ public static class WireManual
     private const string Door = """
         # A Wire program for a door controller.
         # Build it with `build FILE.wire`, open the controller's maintenance panel
-        # with a screwdriver, then `flash ADDRESS FILE.wasm` to put it there.
+        # with a screwdriver, then `flash ADDRESS FILE.bin` to put it there.
         # `man door` lists what a door controller can do.
 
         # Code at the top level runs once, when the controller starts this.
@@ -265,7 +265,7 @@ public static class WireManual
     private const string Camera = """
         # A Wire program for a security camera.
         # Build it with `build FILE.wire`, open the camera's maintenance panel
-        # with a screwdriver, then `flash ADDRESS FILE.wasm` to put it there.
+        # with a screwdriver, then `flash ADDRESS FILE.bin` to put it there.
         # `man camera` lists what a camera can do.
 
         # Code at the top level runs once, when the camera starts this.
@@ -292,7 +292,7 @@ public static class WireManual
 
     private const string Ice = """
         # A Wire program for ICE, guarding a building's network in cyberspace.
-        # Build it with `build FILE.wire`, then `run FILE.wasm &` on one of the
+        # Build it with `build FILE.wire`, then `run FILE.bin &` on one of the
         # building's computers (the & runs it in the background, so the terminal
         # stays free; run it several times for several ICE). `man ice` lists what
         # ICE can do.
@@ -359,7 +359,7 @@ public static class WireManual
 
     private const string Deck = """
         # A Wire program for your deck, in cyberspace.
-        # Build it with `build FILE.wire`, then `hold FILE.wasm` to hold it: Z
+        # Build it with `build FILE.wire`, then `hold FILE.bin` to hold it: Z
         # runs it, and clicking ICE (or a runner) with it runs it at them, with
         # their id as its argument (sys.args()). `man deck` lists what a deck can
         # do.
@@ -390,7 +390,7 @@ public static class WireManual
 
     private const string Implant = """
         # A Wire program for the computer in a piece of cyberware.
-        # Build it with `build FILE.wire`, then `run FILE.wasm &` to keep it
+        # Build it with `build FILE.wire`, then `run FILE.bin &` to keep it
         # running in the background. `man implant` lists what the body can do.
 
         # Checks the owner's vitals once a second, and speaks up when they are

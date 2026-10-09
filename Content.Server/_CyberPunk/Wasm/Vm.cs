@@ -32,7 +32,7 @@ public sealed class Vm : IDisposable
     /// <summary>
     /// The file on a machine's disk it boots instead of the default OS, if it has one.
     /// </summary>
-    public const string BootFile = "boot.wasm";
+    public const string BootFile = "boot.bin";
 
     private readonly MachineIo _io = new();
 

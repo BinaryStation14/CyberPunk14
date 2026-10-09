@@ -48,7 +48,7 @@ exit_after_save = False
 message = ""
 
 HELP = "\n".join([
-    "  CP nano 1.0 help",
+    "  GL nano 1.0 help",
     "",
     "  nano edits text a screen at a time. Type to insert text; the cursor",
     "  is the highlighted character.",
@@ -328,7 +328,7 @@ def draw():
     shown = file
     if shown == "":
         shown = "New Buffer"
-    title = "  CP nano 1.0      File: " + shown
+    title = "  GL nano 1.0      File: " + shown
     flag = ""
     if modified:
         flag = "Modified"

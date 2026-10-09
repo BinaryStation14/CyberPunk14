@@ -15,7 +15,7 @@ public static class DefaultOs
     /// <summary>
     /// The OS's name and version, as its banner and <c>ver</c> show it. It must match <c>NAME</c> in the source.
     /// </summary>
-    public const string Name = "CyberPunk14 OS 1.0";
+    public const string Name = "Gridline OS 4.2";
 
     private static string? _source;
 

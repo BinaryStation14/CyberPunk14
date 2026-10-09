@@ -347,13 +347,13 @@ public sealed class WireTest
             fs.write("ok.wire", "print('built')")
             print(sys.version(), fs.size("missing"), fs.write("a.txt", "four"), fs.size("a.txt"))
             print(fs.delete("nope"), sys.error(), fs.delete("a.txt"), sys.error())
-            print(sys.run("nope.wasm"), sys.error(), sys.start("nope.wasm"), sys.error())
+            print(sys.run("nope.bin"), sys.error(), sys.start("nope.bin"), sys.error())
             print(sys.man("nonsense"), "man wire" in sys.man(), sys.scaffold("toaster"), "sys.exit" in sys.scaffold("computer"))
             print("NAME" in sys.scaffold("os"))
             term.write("no ")
             term.write("newline\n")
             print("a b  c".split(" ", 1), "a,b,c".split(",", 0), "a,b".split(",", -1))
-            print(sys.build("ok.wire", "ok.wasm") > 0, sys.build("bad.wire", "x.wasm"), sys.error())
+            print(sys.build("ok.wire", "ok.bin") > 0, sys.build("bad.wire", "x.bin"), sys.error())
             """;
         Assert.That(Run(src), Does.StartWith($$"""
             {{Kernel.ApiVersion}} None True 4
@@ -548,10 +548,10 @@ public sealed class WireTest
         Assert.That(shell.Command("new hello"), Does.Contain("wrote hello.wire, a computer program. Next:\n  cat hello.wire"));
         Assert.That(shell.Command("new hello"), Does.Contain("new: hello.wire already exists"));
         Assert.That(shell.Command("new gadget toaster"), Does.Contain("new: no program for toaster"));
-        Assert.That(shell.Command("new gate door"), Does.Contain("flash ADDR gate.wasm"));
-        Assert.That(shell.Command("build hello.wire"), Does.Match(@"built hello\.wasm \(\d+ bytes\)"));
+        Assert.That(shell.Command("new gate door"), Does.Contain("flash ADDR gate.bin"));
+        Assert.That(shell.Command("build hello.wire"), Does.Match(@"built hello\.bin \(\d+ bytes\)"));
 
-        var run = shell.Command("run hello.wasm");
+        var run = shell.Command("run hello.bin");
         Assert.That(run, Does.Contain("Hello from a new program!\n"));
         Assert.That(run, Does.Contain("A second has gone by. Bye!\n"));
 
@@ -568,7 +568,7 @@ public sealed class WireTest
 
         using var shell = new Shell(_host);
         Assert.That(shell.Command("new myos os"), Does.Contain("wrote myos.wire, the operating system's source"));
-        Assert.That(shell.Command("build myos.wire boot.wasm"), Does.Match(@"built boot\.wasm \(\d+ bytes\)"));
+        Assert.That(shell.Command("build myos.wire boot.bin"), Does.Match(@"built boot\.bin \(\d+ bytes\)"));
         Assert.That(shell.Command("reboot"), Does.Contain("[rebooting]").And.Contain(DefaultOs.Name));
         Assert.That(shell.Vm.Processes, Is.EqualTo(new[] { Vm.BootFile }));
         Assert.That(shell.Command("echo booted from disk"), Does.Contain("booted from disk"));
@@ -579,8 +579,8 @@ public sealed class WireTest
     {
         using var shell = new Shell(_host);
         Assert.That(shell.Command("write args.wire print('got', sys.args().split())"), Does.Contain("wrote"));
-        Assert.That(shell.Command("build args.wire"), Does.Contain("built args.wasm"));
-        Assert.That(shell.Command("run args.wasm one two"), Does.Contain("got [\"one\", \"two\"]\n"));
+        Assert.That(shell.Command("build args.wire"), Does.Contain("built args.bin"));
+        Assert.That(shell.Command("run args.bin one two"), Does.Contain("got [\"one\", \"two\"]\n"));
     }
 
     #endregion
