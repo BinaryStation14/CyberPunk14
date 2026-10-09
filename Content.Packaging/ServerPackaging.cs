@@ -37,6 +37,15 @@ public static class ServerPackaging
         .Select(o => o.Rid)
         .ToList();
 
+    /// <summary>
+    /// Native libraries content packages pull in that Robust.Server doesn't ship.
+    /// </summary>
+    private static readonly List<string> ContentNativeLibraries = new()
+    {
+        // CyberPunk14: the WASM runtime in-game machines run on, see WasmHost.
+        "wasmtime",
+    };
+
     private static readonly List<string> ServerNotExtraAssemblies = new()
     {
         "JetBrains.Annotations",
@@ -201,6 +210,8 @@ public static class ServerPackaging
             BinSkipFolders,
             cancel: cancel);
 
+        WriteContentNativeLibraries(platform, sourcePath, inputPassCore);
+
         await RobustSharedPackaging.WriteContentAssemblies(
             inputPassResources,
             contentDir,
@@ -221,6 +232,26 @@ public static class ServerPackaging
 
         inputPassCore.InjectFinished();
         inputPassResources.InjectFinished();
+    }
+
+    // Content assemblies load from the server's resources, so their native libraries can't sit next to them.
+    // They go beside the server executable instead, where .NET's default search finds them.
+    private static void WriteContentNativeLibraries(PlatformReg platform, string sourcePath, AssetPass pass)
+    {
+        foreach (var name in ContentNativeLibraries)
+        {
+            var file = platform.TargetOs switch
+            {
+                "Windows" => $"{name}.dll",
+                "MacOS" => $"lib{name}.dylib",
+                _ => $"lib{name}.so",
+            };
+
+            // Not every library has a build for every platform (FreeBSD, for one).
+            var path = Path.Combine(sourcePath, "runtimes", platform.Rid, "native", file);
+            if (File.Exists(path))
+                pass.InjectFileFromDisk(file, path);
+        }
     }
 
     // This returns both content assemblies (e.g. Content.Server.dll) and dependencies (e.g. Npgsql)
