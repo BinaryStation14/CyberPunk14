@@ -91,6 +91,9 @@
   description: Joins the data cable on its tile and the four beside it, and any switch or router racked next to it, into one network while it has power. It gives out no addresses; that takes a router.
   components:
   - type: NetworkHub
+  - type: GuideHelp
+    guides:
+    - ComputerNetworks
 
 - type: entity
   parent: NetworkHubBase
@@ -99,4 +102,7 @@
   description: Joins the data cable around it like a switch, gives every machine on its network an address, connects its network to the others in the city, and keeps the directory of hostnames the machines publish.
   components:
   - type: NetworkHub
+  - type: GuideHelp
+    guides:
+    - ComputerNetworks
     router: true

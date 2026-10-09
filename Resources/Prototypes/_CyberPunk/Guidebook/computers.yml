@@ -1,0 +1,42 @@
+- type: guideEntry
+  id: Computers
+  name: guide-entry-computers
+  priority: 25
+  text: "/ServerInfo/_CyberPunk/Guidebook/Computers/Computers.xml"
+  children:
+  - ComputerShell
+  - WireProgramming
+  - ProgramUis
+  - ComputerNetworks
+  - CustomOperatingSystems
+  - ComputerAssembly
+
+- type: guideEntry
+  id: ComputerShell
+  name: guide-entry-computer-shell
+  text: "/ServerInfo/_CyberPunk/Guidebook/Computers/Shell.xml"
+
+- type: guideEntry
+  id: WireProgramming
+  name: guide-entry-wire-programming
+  text: "/ServerInfo/_CyberPunk/Guidebook/Computers/Wire.xml"
+
+- type: guideEntry
+  id: ProgramUis
+  name: guide-entry-program-uis
+  text: "/ServerInfo/_CyberPunk/Guidebook/Computers/ProgramUis.xml"
+
+- type: guideEntry
+  id: ComputerNetworks
+  name: guide-entry-computer-networks
+  text: "/ServerInfo/_CyberPunk/Guidebook/Computers/Networks.xml"
+
+- type: guideEntry
+  id: CustomOperatingSystems
+  name: guide-entry-custom-operating-systems
+  text: "/ServerInfo/_CyberPunk/Guidebook/Computers/CustomOs.xml"
+
+- type: guideEntry
+  id: ComputerAssembly
+  name: guide-entry-computer-assembly
+  text: "/ServerInfo/_CyberPunk/Guidebook/Computers/Assembly.xml"

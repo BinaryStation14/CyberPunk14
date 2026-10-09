@@ -327,6 +327,9 @@
       data:
         !type:CableDeviceNode
         nodeGroupID: Data
+  - type: GuideHelp
+    guides:
+    - Computers
   - type: ActivatableUI
     key: enum.MachineTerminalUiKey.Key
   - type: UserInterface

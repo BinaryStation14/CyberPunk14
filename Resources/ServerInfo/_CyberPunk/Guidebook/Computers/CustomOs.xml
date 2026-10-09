@@ -1,0 +1,19 @@
+<Document>
+  # Custom Operating Systems
+
+  The operating system a computer boots, Gridline OS, is a Wire program like any other. You can read it, change it, and boot your own version.
+
+  ## Booting your own
+  - [mono]new myos os[/mono] copies the OS's source into [mono]myos.wire[/mono].
+  - Change it: rename the prompt, add commands, or start from scratch.
+  - [mono]build myos.wire boot.bin[/mono] builds it as [mono]boot.bin[/mono].
+  - [mono]reboot[/mono] restarts the computer, which boots [mono]boot.bin[/mono] from its disk instead of the OS it came with.
+
+  ## When it goes wrong
+  If [mono]boot.bin[/mono] won't load, or it crashes or ends, the computer starts the OS it came with instead, and keeps doing so until it is rebooted or loses power. A broken OS can't lock anyone out. [mono]rm boot.bin[/mono] and then [mono]reboot[/mono] puts things back.
+
+  ## Other programs that come with it
+  The text editor, nano, is a Wire program too: [mono]new mynano nano[/mono] copies its source to change and build as your own.
+
+  [mono]man boot[/mono] on any computer explains it all again.
+</Document>

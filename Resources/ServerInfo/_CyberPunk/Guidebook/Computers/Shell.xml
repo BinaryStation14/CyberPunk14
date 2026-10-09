@@ -1,0 +1,37 @@
+<Document>
+  # The Shell
+
+  The shell is the program a computer runs at its prompt. It reads a line, runs the command, and prompts again. Typing [mono]help[/mono] lists the commands, and [mono]man shell[/mono] explains them.
+
+  ## Files
+  - [mono]ls[/mono] lists the files on the disk, and [mono]ls FOLDER[/mono] those in a folder.
+  - [mono]cat FILE[/mono] shows a file.
+  - [mono]cp FROM TO[/mono] copies a file. [mono]cp examples/calc.wire .[/mono] copies it out of its folder.
+  - [mono]write FILE TEXT[/mono] writes text to a file, replacing it, and [mono]append FILE TEXT[/mono] adds a line.
+  - [mono]rm FILE[/mono] deletes a file.
+  - [mono]nano FILE[/mono] opens the text editor. [bold]Ctrl+O[/bold] saves, [bold]Ctrl+X[/bold] exits, and [bold]Ctrl+G[/bold] shows the rest of its keys.
+
+  ## Programs
+  - [mono]new NAME[/mono] starts a Wire program, [mono]NAME.wire[/mono], from a template.
+  - [mono]build FILE.wire[/mono] builds it into [mono]FILE.bin[/mono], or says which line has a mistake. [mono]build FILE.wire OUT.bin[/mono] picks the output's name.
+  - [mono]run FILE.bin[/mono] runs a program at the terminal; anything after the name is passed to it. The shell waits until the program ends.
+  - [mono]run FILE.bin &[/mono] runs it as a background job instead, alongside the shell, without the terminal's input. A computer runs up to 8 jobs.
+  - [mono]jobs[/mono] lists the background jobs, and [mono]kill N[/mono] stops one.
+
+  ## The network
+  - [mono]ip[/mono] shows this computer's address, once it is cabled to a router.
+  - [mono]hostname NAME[/mono] gives the computer a name other machines can reach it by, and [mono]hostname[/mono] shows it.
+  - [mono]hosts[/mono] lists every name the routers know.
+
+  See [textlink="Computer Networks" link="ComputerNetworks"].
+
+  ## Everything else
+  - [mono]man[/mono] lists the manual's pages, and [mono]man TOPIC[/mono] opens one, such as [mono]man wire[/mono], [mono]man modules[/mono] or [mono]man ui[/mono].
+  - [mono]echo TEXT[/mono] prints text, [mono]uptime[/mono] shows the time since boot, and [mono]ver[/mono] the OS and kernel versions.
+  - [mono]reboot[/mono] restarts the computer.
+
+  ## Running commands at boot
+  A file named [mono]autorun[/mono] holds commands the shell runs every time it boots, one a line, as if typed at the prompt. A command that runs a program at the terminal is the last one it runs, so put background jobs first:
+
+  [mono]write autorun run monitor.bin &[/mono]
+</Document>

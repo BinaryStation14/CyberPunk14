@@ -1,0 +1,32 @@
+<Document>
+  # Program UIs
+
+  A program running at a computer's terminal can show a UI instead of text: labels, buttons, boxes to type in, lists to pick from, progress bars, and a canvas to draw on. Everyone at the terminal sees it, and what they click or type goes back to the program.
+
+  When a program shows a UI, the terminal window switches to it. A button at the top switches back and forth between the UI and the text. The UI goes away when the program ends.
+
+  ## Try it
+  Every computer comes with a calculator built this way:
+  - [mono]build examples/calc.wire[/mono]
+  - [mono]run examples/calc.bin[/mono]
+
+  Read it with [mono]cat examples/calc.wire[/mono]: it is about 90 lines.
+
+  ## Building a UI
+  The [bold]ui[/bold] module builds widgets, and [mono]ui.show[/mono] shows them:
+  - [mono]ui.column(list)[/mono] and [mono]ui.row(list)[/mono] lay widgets out top to bottom or left to right.
+  - [mono]ui.label(text)[/mono] shows text.
+  - [mono]ui.button(id, text)[/mono] is a button.
+  - [mono]ui.input(id, text)[/mono] is a line to type on; pressing Enter sends what was typed.
+  - [mono]ui.list(id, items)[/mono] is a list to pick from.
+  - [mono]ui.progress(value, most)[/mono] is a progress bar.
+  - [mono]ui.canvas(id, width, height, drawing)[/mono] is a canvas, drawn with [mono]ui.rect[/mono], [mono]ui.line[/mono] and [mono]ui.text[/mono] in colors like [mono]"red"[/mono] or [mono]"#ff8000"[/mono]. Clicking it sends where it was clicked.
+
+  ## Hearing back
+  [mono]ui.events()[/mono] returns what has happened since it was last called. Each event has [mono].id[/mono] (the widget's id), [mono].kind[/mono] ([mono]click[/mono], [mono]submit[/mono] or [mono]select[/mono]) and [mono].value[/mono] (the typed text, the picked item's number, or where a canvas was clicked).
+
+  A program usually reads its events in [mono]tick[/mono], changes what it needs to, and shows the whole UI again. Showing the same UI again costs nothing.
+
+  ## Limits
+  A UI can have up to 256 widgets, nested 16 deep, with up to 512 drawing operations and canvases of up to 640 by 400. Only the program in front of the terminal can show one, not background jobs. [mono]man ui[/mono] has the details.
+</Document>
