@@ -203,12 +203,30 @@ public sealed partial class TerminalScreen : Control
     {
         base.EnteredTree();
         _input.FirstChanceOnKeyEvent += OnFirstChanceKey;
+
+        // Focus grabbed before the window was open had no window to start text input on.
+        if (HasKeyboardFocus())
+            Root?.Window?.TextInputStart();
     }
 
     protected override void ExitedTree()
     {
         base.ExitedTree();
         _input.FirstChanceOnKeyEvent -= OnFirstChanceKey;
+    }
+
+    // The window only sends typed characters (TextEntered) while text input is on, as for a LineEdit; without
+    // it, only keys such as Enter, which come through OnFirstChanceKey, reach the machine.
+    protected override void KeyboardFocusEntered()
+    {
+        base.KeyboardFocusEntered();
+        Root?.Window?.TextInputStart();
+    }
+
+    protected override void KeyboardFocusExited()
+    {
+        base.KeyboardFocusExited();
+        Root?.Window?.TextInputStop();
     }
 
     /// <summary>
