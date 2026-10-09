@@ -424,7 +424,7 @@ public sealed class VmTest
               (data (i32.const 0) "nest.bin")
               (data (i32.const 16) "too deep\n")
               (func (export "start")
-                (if (i32.eq (call $exec (i32.const 0) (i32.const 9)) (i32.const -3))
+                (if (i32.eq (call $exec (i32.const 0) (i32.const 8)) (i32.const -3))
                   (then (call $write (i32.const 16) (i32.const 9)))))
               (func (export "tick")))
             """);
