@@ -250,7 +250,7 @@ public sealed partial class WasmMachineSystem
         var messages = UiMessages();
         var calls = new SortedDictionary<string, Type>(StringComparer.Ordinal);
         handlers = new List<IComponent>();
-        foreach (var comp in EntityManager.GetComponents(device))
+        foreach (var comp in AllComps(device))
         {
             if (!messages.TryGetValue(comp.GetType(), out var types))
                 continue;
