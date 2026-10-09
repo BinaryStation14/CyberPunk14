@@ -34,6 +34,16 @@ namespace Content.IntegrationTests.Tests
             Dirty = true,
         };
 
+        /// <summary>
+        ///     How many prototypes the one-map-per-entity tests spawn at a time.
+        /// </summary>
+        /// <remarks>
+        ///     CyberPunk14: every map and grid preallocates its lookup and physics trees, about 300 KB even when
+        ///     empty. With one map for each of the ~11,000 entity prototypes those tests peaked near 10 GB, which
+        ///     runs CI runners out of memory. Spawning in batches keeps only this many maps alive at once.
+        /// </remarks>
+        private const int MapBatchSize = 1000;
+
         [Test]
         [PairConfig(nameof(Disconnected))]
         public async Task SpawnAndDeleteAllEntitiesOnDifferentMaps()
@@ -47,29 +57,42 @@ namespace Content.IntegrationTests.Tests
             var prototypeMan = server.ResolveDependency<IPrototypeManager>();
             var mapSystem = entityMan.System<SharedMapSystem>();
 
-            await server.WaitPost(() =>
+            var protoIds = prototypeMan
+                .EnumeratePrototypes<EntityPrototype>()
+                .Where(p => !p.Abstract)
+                .Where(p => !pair.IsTestPrototype(p))
+                .Where(p => !p.Components.ContainsKey("MapGrid")) // This will smash stuff otherwise.
+                .Where(p => !p.Components.ContainsKey("RoomFill")) // This comp can delete all entities, and spawn others
+                .Select(p => p.ID)
+                .ToList();
+
+            foreach (var batch in protoIds.Chunk(MapBatchSize))
             {
-                var protoIds = prototypeMan
-                    .EnumeratePrototypes<EntityPrototype>()
-                    .Where(p => !p.Abstract)
-                    .Where(p => !pair.IsTestPrototype(p))
-                    .Where(p => !p.Components.ContainsKey("MapGrid")) // This will smash stuff otherwise.
-                    .Where(p => !p.Components.ContainsKey("RoomFill")) // This comp can delete all entities, and spawn others
-                    .Select(p => p.ID)
-                    .ToList();
+                var maps = new List<EntityUid>();
 
-                foreach (var protoId in protoIds)
+                await server.WaitPost(() =>
                 {
-                    mapSystem.CreateMap(out var mapId);
-                    var grid = mapSystem.CreateGridEntity(mapId);
-                    // TODO: Fix this better in engine.
-                    mapSystem.SetTile(grid.Owner, grid.Comp, Vector2i.Zero, new Tile(1));
-                    var coord = new EntityCoordinates(grid.Owner, 0, 0);
-                    entityMan.SpawnEntity(protoId, coord);
-                }
-            });
+                    foreach (var protoId in batch)
+                    {
+                        maps.Add(mapSystem.CreateMap(out var mapId));
+                        var grid = mapSystem.CreateGridEntity(mapId);
+                        // TODO: Fix this better in engine.
+                        mapSystem.SetTile(grid.Owner, grid.Comp, Vector2i.Zero, new Tile(1));
+                        var coord = new EntityCoordinates(grid.Owner, 0, 0);
+                        entityMan.SpawnEntity(protoId, coord);
+                    }
+                });
 
-            await server.WaitRunTicks(450); // 15 seconds, enough to trigger most update loops
+                await server.WaitRunTicks(450); // 15 seconds, enough to trigger most update loops
+
+                await server.WaitPost(() =>
+                {
+                    foreach (var map in maps)
+                    {
+                        entityMan.DeleteEntity(map);
+                    }
+                });
+            }
 
             await server.WaitPost(() =>
             {
@@ -172,25 +195,40 @@ namespace Content.IntegrationTests.Tests
                 .Select(p => p.ID)
                 .ToList();
 
-            await server.WaitPost(() =>
+            foreach (var batch in protoIds.Chunk(MapBatchSize))
             {
-                foreach (var protoId in protoIds)
+                var maps = new List<EntityUid>();
+
+                await server.WaitPost(() =>
                 {
-                    mapSys.CreateMap(out var mapId);
-                    var grid = mapSys.CreateGridEntity(mapId);
-                    var ent = sEntMan.SpawnEntity(protoId, new EntityCoordinates(grid.Owner, 0.5f, 0.5f));
-                    foreach (var (_, component) in sEntMan.GetNetComponents(ent))
+                    foreach (var protoId in batch)
                     {
-                        sEntMan.Dirty(ent, component);
+                        maps.Add(mapSys.CreateMap(out var mapId));
+                        var grid = mapSys.CreateGridEntity(mapId);
+                        var ent = sEntMan.SpawnEntity(protoId, new EntityCoordinates(grid.Owner, 0.5f, 0.5f));
+                        foreach (var (_, component) in sEntMan.GetNetComponents(ent))
+                        {
+                            sEntMan.Dirty(ent, component);
+                        }
                     }
-                }
-            });
+                });
 
-            await pair.RunUntilSynced();
+                await pair.RunUntilSynced();
 
-            // Make sure the client actually received the entities
-            // 500 is completely arbitrary. Note that the client & sever entity counts aren't expected to match.
-            Assert.That(client.ResolveDependency<IEntityManager>().EntityCount, Is.GreaterThan(500));
+                // Make sure the client actually received the entities
+                // 500 is completely arbitrary. Note that the client & sever entity counts aren't expected to match.
+                Assert.That(client.ResolveDependency<IEntityManager>().EntityCount, Is.GreaterThan(500));
+
+                await server.WaitPost(() =>
+                {
+                    foreach (var map in maps)
+                    {
+                        sEntMan.DeleteEntity(map);
+                    }
+                });
+
+                await pair.RunUntilSynced();
+            }
 
             await server.WaitPost(() =>
             {
