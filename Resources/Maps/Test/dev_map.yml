@@ -16353,7 +16353,7 @@ entities:
     components:
     - type: Transform
       parent: 1
-      pos: 29.5,26.5
+      pos: 29.5,25.5
     - type: MapText
       text: Computers & Net
       fontSize: 14
@@ -16967,7 +16967,7 @@ entities:
       name: to computers & net
     - type: Transform
       parent: 1
-      pos: 29.5,27.5
+      pos: 29.5,26.5
     - type: LinkedEntity
       linkedEntities:
       - 3744
