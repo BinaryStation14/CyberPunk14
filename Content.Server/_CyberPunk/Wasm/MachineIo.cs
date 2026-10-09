@@ -94,6 +94,9 @@ public sealed class MachineIo
     /// <summary>The UI the program being called set (a null root clears it), and its text.</summary>
     public (ProgramUiNode? Root, string Text)? UiChange;
 
+    /// <summary>The title the program being called gave the terminal window ("" gives it back).</summary>
+    public string? TitleChange;
+
     /// <summary>What people did to the front program's UI, for <c>ui_event</c>.</summary>
     public readonly Queue<(string Id, ProgramUiEventKind Kind, string Value)> UiEvents = new();
 

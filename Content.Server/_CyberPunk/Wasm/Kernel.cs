@@ -74,10 +74,10 @@ public sealed record KernelHook(string Name, string Signature, KernelScope Scope
 public static class Kernel
 {
     /// <summary>
-    /// The newest kernel version. Programs import from <c>sb_v0</c> up to <c>sb_v8</c>, and every one is
+    /// The newest kernel version. Programs import from <c>sb_v0</c> up to <c>sb_v9</c>, and every one is
     /// provided, so programs built against an older kernel keep working.
     /// </summary>
-    public const int ApiVersion = 8;
+    public const int ApiVersion = 9;
 
     /// <summary>
     /// The screen is 80 columns; manual pages are wrapped to fit.
@@ -213,6 +213,8 @@ public static class Kernel
             "The next key pressed in raw mode, or -1: a character's code, 8 Backspace, 9 Tab, 10 Enter, 127 Delete, 1-26 Ctrl+A to Ctrl+Z, and 0x110001-0x110008 for Up, Down, Left, Right, Home, End, PageUp, PageDown."),
         new("term_clear", "", KernelScope.Computer, 2,
             "Clears the screen, for drawing it afresh."),
+        new("term_title", "(param $text i32 $len i32) (result i32)", KernelScope.Computer, 9,
+            $"Names the terminal window while this program is in front ({KernelApi.MaxTitle} characters at most); an empty title gives the window back to the program under it. 0 set, -1 not at the terminal (a background job)."),
         new("ui_set", "(param $text i32 $len i32 $err i32 $err_cap i32) (result i32)", KernelScope.Computer, 8,
             "Shows a UI in the terminal window, in place of the text, while this program is in front (man ui): the text describes its widgets. 0 shown, -1 not at the terminal (a background job), -2 not a UI (why goes to err)."),
         new("ui_event", "(param $buf i32 $cap i32) (result i32)", KernelScope.Computer, 8,

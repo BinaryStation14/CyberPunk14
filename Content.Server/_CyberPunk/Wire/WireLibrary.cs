@@ -123,6 +123,8 @@ public static class WireLibrary
             "The next key pressed in raw mode, or None: a character's code (chr() turns it into text), or term.ENTER, term.UP and so on."),
         new("term.clear", "term.clear()", 0, 0, "computer",
             "Clears the screen (24 lines of 80 characters)."),
+        new("term.title", "term.title(text)", 1, 1, "computer",
+            "Names the terminal window while this program is in front (64 characters at most); \"\" gives it back to the program under it, or the OS. False if this program is a background job."),
         new("ui.show", "ui.show(widget)", 1, 1, "computer",
             "Shows a UI in the terminal window in place of the text while this program is in front, built from the widgets below (man ui). Showing the same one again costs nothing. False if this program is a background job."),
         new("ui.events", "ui.events()", 0, 0, "computer",

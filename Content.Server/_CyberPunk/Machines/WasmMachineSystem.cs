@@ -247,6 +247,14 @@ public sealed partial class WasmMachineSystem : EntitySystem
                 _ui.ServerSendUiMessage(ent.Owner, MachineTerminalUiKey.Key, new MachineTerminalOutputMessage(text));
         }
 
+        var title = ent.Comp.Vm?.Title;
+        if (title != ent.Comp.ShownTitle)
+        {
+            ent.Comp.ShownTitle = title;
+            if (open)
+                _ui.ServerSendUiMessage(ent.Owner, MachineTerminalUiKey.Key, new MachineTerminalTitleMessage(title));
+        }
+
         // Each UI a program shows is a new tree, and showing the same text again keeps the old one.
         var ui = ent.Comp.Vm?.Ui;
         if (ReferenceEquals(ui, ent.Comp.ShownUi))
@@ -278,6 +286,7 @@ public sealed partial class WasmMachineSystem : EntitySystem
             new MachineTerminalScreenMessage(ent.Comp.Screen),
             actor);
         _ui.ServerSendUiMessage(ent.Owner, MachineTerminalUiKey.Key, new MachineTerminalUiMessage(ent.Comp.ShownUi), actor);
+        _ui.ServerSendUiMessage(ent.Owner, MachineTerminalUiKey.Key, new MachineTerminalTitleMessage(ent.Comp.ShownTitle), actor);
     }
 
     private void OnTerminalUiEvent(Entity<WasmMachineComponent> ent, ref MachineTerminalUiEventMessage args)

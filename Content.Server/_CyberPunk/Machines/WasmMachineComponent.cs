@@ -53,6 +53,12 @@ public sealed partial class WasmMachineComponent : Component
     public ProgramUiNode? ShownUi;
 
     /// <summary>
+    /// The title its programs give the terminal window, as last sent to the people with it open; null for none.
+    /// </summary>
+    [ViewVariables]
+    public string? ShownTitle;
+
+    /// <summary>
     /// The machine tick it last ran in.
     /// </summary>
     [ViewVariables]
