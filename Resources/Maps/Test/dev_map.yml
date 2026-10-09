@@ -5,7 +5,7 @@ meta:
   forkId: ""
   forkVersion: ""
   time: 08/23/2026 10:22:08
-  entityCount: 3812
+  entityCount: 3827
 maps:
 - 23
 grids:
@@ -7482,6 +7482,56 @@ entities:
     - type: Transform
       parent: 1
       pos: 23.5,64.5
+  - uid: 3813
+    components:
+    - type: Transform
+      parent: 1
+      pos: 23.5,63.5
+  - uid: 3814
+    components:
+    - type: Transform
+      parent: 1
+      pos: 19.5,62.5
+  - uid: 3815
+    components:
+    - type: Transform
+      parent: 1
+      pos: 20.5,62.5
+  - uid: 3816
+    components:
+    - type: Transform
+      parent: 1
+      pos: 21.5,62.5
+  - uid: 3817
+    components:
+    - type: Transform
+      parent: 1
+      pos: 22.5,62.5
+  - uid: 3818
+    components:
+    - type: Transform
+      parent: 1
+      pos: 23.5,62.5
+  - uid: 3819
+    components:
+    - type: Transform
+      parent: 1
+      pos: 24.5,62.5
+  - uid: 3820
+    components:
+    - type: Transform
+      parent: 1
+      pos: 25.5,62.5
+  - uid: 3821
+    components:
+    - type: Transform
+      parent: 1
+      pos: 26.5,62.5
+  - uid: 3822
+    components:
+    - type: Transform
+      parent: 1
+      pos: 27.5,62.5
 - proto: CableDataStack
   entities:
   - uid: 3812
@@ -12696,7 +12746,7 @@ entities:
       parent: 1
       rot: -1.5707963267948966 rad
       pos: 77.5,9.5
-- proto: ComputerProgrammable
+- proto: ComputerProgrammableDev
   entities:
   - uid: 3746
     components:
@@ -15509,6 +15559,13 @@ entities:
     - type: Transform
       parent: 1
       pos: 17.375,19.625
+- proto: Jukebox
+  entities:
+  - uid: 3825
+    components:
+    - type: Transform
+      parent: 1
+      pos: 23.5,62.5
 - proto: KitchenElectricGrill
   entities:
   - uid: 935
@@ -19692,6 +19749,13 @@ entities:
     - type: Transform
       parent: 1
       pos: 58.508247,56.65863
+- proto: SpaceHeaterAnchored
+  entities:
+  - uid: 3826
+    components:
+    - type: Transform
+      parent: 1
+      pos: 25.5,62.5
 - proto: SpawnMechRipley
   entities:
   - uid: 3654
@@ -20906,6 +20970,20 @@ entities:
     - type: Transform
       parent: 1
       pos: 52.5,44.5
+- proto: VendingMachineCoffee
+  entities:
+  - uid: 3827
+    components:
+    - type: Transform
+      parent: 1
+      pos: 27.5,62.5
+- proto: VendingMachineCola
+  entities:
+  - uid: 3823
+    components:
+    - type: Transform
+      parent: 1
+      pos: 19.5,62.5
 - proto: VendingMachineCondiments
   entities:
   - uid: 981
@@ -20998,6 +21076,13 @@ entities:
     - type: Transform
       parent: 1
       pos: 36.5,44.5
+- proto: VendingMachineSnack
+  entities:
+  - uid: 3824
+    components:
+    - type: Transform
+      parent: 1
+      pos: 21.5,62.5
 - proto: VendingMachineTankDispenserEVA
   entities:
   - uid: 3358

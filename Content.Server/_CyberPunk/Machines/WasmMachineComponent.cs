@@ -1,5 +1,6 @@
 using Content.Server._CyberPunk.Wasm;
 using Content.Shared._CyberPunk.Machines;
+using Robust.Shared.Serialization.Manager.Attributes;
 
 namespace Content.Server._CyberPunk.Machines;
 
@@ -17,9 +18,10 @@ public sealed partial class WasmMachineComponent : Component
     public DeviceKind Kind = DeviceKind.Computer;
 
     /// <summary>
-    /// Text files put on its disk when it's made, by name.
+    /// Text files put on its disk when it's made, by name. A prototype that inherits from another adds its
+    /// files to the parent's.
     /// </summary>
-    [DataField]
+    [DataField, AlwaysPushInheritance]
     public Dictionary<string, string> Files = new();
 
     /// <summary>
