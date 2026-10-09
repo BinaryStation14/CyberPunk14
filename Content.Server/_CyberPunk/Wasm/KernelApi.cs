@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Text;
+using Content.Server._CyberPunk.Wire;
 using Content.Shared._CyberPunk.Machines;
 using Wasmtime;
 
@@ -421,7 +422,7 @@ internal sealed class KernelApi
             if (code.Length > WasmHost.MaxSource)
                 return -2;
 
-            var bytes = BuildWat(io.Host, source, code, out var why);
+            var bytes = Build(io.Host, source, code, out var why);
             if (bytes == null)
             {
                 WriteText(c, err, errCap, why!);
@@ -449,22 +450,22 @@ internal sealed class KernelApi
     }
 
     /// <summary>
-    /// Builds a source file into a program, or says why it doesn't build.
+    /// Builds a source file into a program, or says why it doesn't build: WAT if its name ends in
+    /// <c>.wat</c>, Wire otherwise.
     /// </summary>
-    private static byte[]? BuildWat(WasmHost host, string name, byte[] source, out string? why)
+    private static byte[]? Build(WasmHost host, string name, byte[] source, out string? why)
     {
         why = null;
-        if (!name.EndsWith(".wat"))
-        {
-            why = "Wire programs can't be built on this machine yet. Write WAT instead (man wat).";
-            return null;
-        }
-
+        var text = Encoding.UTF8.GetString(source);
         try
         {
-            var bytes = Module.ConvertText(Encoding.UTF8.GetString(source));
+            var bytes = name.EndsWith(".wat") ? Module.ConvertText(text) : WireCompiler.Compile(text);
             host.Load(bytes);
             return bytes;
+        }
+        catch (WireException e)
+        {
+            why = e.Message;
         }
         catch (WasmtimeException e)
         {

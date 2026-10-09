@@ -363,10 +363,16 @@ public sealed class Vm : IDisposable
         }
         catch (WasmtimeException e)
         {
-            var why = e is TrapException { Type: TrapCode.OutOfFuel }
-                ? "it used up its time budget"
-                : WasmHost.FirstLine(e.Message);
-            _io.Output.Append($"\n[{process.Name} crashed in on_door_request: {why}]\n");
+            // A program that exited on the way down (a Wire runtime error) has said why itself.
+            if (_io.Exit == null)
+            {
+                var why = e is TrapException { Type: TrapCode.OutOfFuel }
+                    ? "it used up its time budget"
+                    : WasmHost.FirstLine(e.Message);
+                _io.Output.Append($"\n[{process.Name} crashed in on_door_request: {why}]\n");
+            }
+
+            _io.Exit = null;
             EndFront(clean: false);
             return false;
         }
@@ -567,7 +573,7 @@ public sealed class Vm : IDisposable
             _io.Output.Append($"\n[{name} killed: it used up its time budget]\n");
             finished = true;
         }
-        else if (crash != null)
+        else if (crash != null && _io.Exit == null)
         {
             _io.Output.Append($"\n[{name} crashed: {crash}]\n");
             finished = true;

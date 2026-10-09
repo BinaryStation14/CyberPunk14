@@ -1,11 +1,13 @@
 using Content.IntegrationTests.Fixtures;
 using Content.Server._CyberPunk.Machines;
 using Content.Server._CyberPunk.Wasm;
+using Content.Server._CyberPunk.Wire;
 using Content.Shared.Coordinates;
 using Content.Shared.Power.EntitySystems;
 using Robust.Shared.GameObjects;
 using Robust.Shared.Map;
 using Robust.Shared.Maths;
+using Robust.Shared.Prototypes;
 
 namespace Content.IntegrationTests.Tests._CyberPunk;
 
@@ -61,6 +63,19 @@ public sealed class WasmMachineTest : GameTest
             var machine = entManager.GetComponent<WasmMachineComponent>(computer);
             Assert.That(machine.Screen, Does.Contain("Hello from a program!"));
 
+            // A new Wire program builds and runs on the machine itself.
+            machines.TypeLine((computer, machine), "new greet");
+            machines.TypeLine((computer, machine), "build greet.wire");
+            machines.TypeLine((computer, machine), "run greet.wasm");
+        });
+
+        await server.WaitRunTicks(30);
+
+        await server.WaitAssertion(() =>
+        {
+            var machine = entManager.GetComponent<WasmMachineComponent>(computer);
+            Assert.That(machine.Screen, Does.Contain("Hello from a new program!"));
+
             power.SetNeedsPower(computer, true);
         });
 
@@ -73,6 +88,38 @@ public sealed class WasmMachineTest : GameTest
             Assert.That(machine.Screen, Does.Contain("[power lost]"));
 
             entManager.DeleteEntity(computer);
+        });
+    }
+
+    /// <summary>
+    /// Every Wire program a machine starts with builds, so the examples players are pointed at work.
+    /// </summary>
+    [Test]
+    public async Task SeededWireProgramsBuild()
+    {
+        var server = Pair.Server;
+        var protoMan = server.ResolveDependency<IPrototypeManager>();
+        var factory = server.ResolveDependency<IComponentFactory>();
+
+        await server.WaitAssertion(() =>
+        {
+            Assert.Multiple(() =>
+            {
+                foreach (var proto in protoMan.EnumeratePrototypes<EntityPrototype>())
+                {
+                    if (proto.Abstract || Pair.IsTestPrototype(proto) ||
+                        !proto.TryComp<WasmMachineComponent>(out var machine, factory))
+                        continue;
+
+                    foreach (var (name, source) in machine.Files)
+                    {
+                        if (!name.EndsWith(".wire"))
+                            continue;
+
+                        Assert.DoesNotThrow(() => WireCompiler.Compile(source), $"{proto.ID}'s {name} doesn't build");
+                    }
+                }
+            });
         });
     }
 }

@@ -10,7 +10,7 @@ namespace Content.Server._CyberPunk.Wasm;
 /// <remarks>
 /// <para>
 /// It reads typed lines, echoes them, and runs <c>help</c>, <c>man</c>, <c>ls</c>, <c>cat</c>, <c>write</c>,
-/// <c>append</c>, <c>rm</c>, <c>build</c> (from WAT), <c>run</c> (in front, or in the background with
+/// <c>append</c>, <c>rm</c>, <c>new</c> (a Wire program to start from), <c>build</c> (from Wire or WAT), <c>run</c> (in front, or in the background with
 /// <c>&amp;</c>), <c>jobs</c>, <c>kill</c>, <c>echo</c>, <c>uptime</c> and <c>ver</c>, with the same
 /// messages as Switchboard's default OS. A program it runs takes over the terminal until it ends, and the
 /// shell prompts again.
@@ -21,7 +21,8 @@ namespace Content.Server._CyberPunk.Wasm;
 /// </para>
 /// <para>
 /// The program's text lives in <see cref="Template"/>, where <c>@name</c> stands for a string in
-/// <see cref="Strings"/> as its address and length. <see cref="Wat"/> lays the strings out in a data segment
+/// <see cref="Strings"/> as its address and length (<c>@name_at</c> and <c>@name_len</c> for each alone).
+/// <see cref="Wat"/> lays the strings out in a data segment
 /// and fills them in.
 /// </para>
 /// </remarks>
@@ -40,7 +41,8 @@ public static class StubOs
         write FILE TEXT...         write text to a file (replacing it)
         append FILE TEXT...        add a line of text to a file
         rm FILE                    delete a file
-        build FILE.wat [OUT.wasm]  build a program from WAT
+        new NAME [KIND]            start a Wire program, NAME.wire
+        build FILE [OUT.wasm]      build a program from Wire (or WAT)
         run FILE [ARGS...] [&]     run a program (& in the background)
         jobs, kill N               background jobs: list, stop one
         echo TEXT...               print text
@@ -48,7 +50,7 @@ public static class StubOs
 
         """;
 
-    private static readonly Regex StringRef = new("@([a-z_]+)");
+    private static readonly Regex StringRef = new("@([a-z_]+?)(_at|_len)?\\b");
 
     /// <summary>
     /// The strings the shell prints and the command names it knows.
@@ -98,7 +100,21 @@ public static class StubOs
         ("usage_rm", "usage: rm FILE\n"),
         ("usage_run", "usage: run FILE [ARGS...] [&]\n"),
         ("usage_kill", "usage: kill N   (a job's number, from `jobs`)\n"),
-        ("usage_build", "usage: build FILE.wat [OUT.wasm]\n"),
+        ("usage_build", "usage: build FILE.wire [OUT.wasm]   (or FILE.wat)\n"),
+        ("usage_new", "usage: new NAME [computer|door|camera|ice|deck|implant]\n"),
+        ("new_", "new: "),
+        ("exists", " already exists\n"),
+        ("no_kind", "new: no program for "),
+        ("kinds", " (computer, door, camera, ice, deck or implant)\n"),
+        ("comma_a", ", a "),
+        ("next", " program. Next:\n  cat "),
+        ("read_it", "   read it\n  build "),
+        ("build_it", "   build it into "),
+        ("run_it", "\n  run "),
+        ("flash_it", "\n  flash ADDR "),
+        ("hold_it", "\n  hold "),
+        ("man_flash", "   (man flash)\n"),
+        ("man_deck", "   (man deck)\n"),
         ("ext_wat", ".wat"),
         ("ext_wire", ".wire"),
         ("ext_wasm", ".wasm"),
@@ -110,6 +126,11 @@ public static class StubOs
         ("k_append", "append"),
         ("k_rm", "rm"),
         ("k_build", "build"),
+        ("k_new", "new"),
+        ("k_computer", "computer"),
+        ("k_door", "door"),
+        ("k_camera", "camera"),
+        ("k_deck", "deck"),
         ("k_run", "run"),
         ("k_jobs", "jobs"),
         ("k_kill", "kill"),
@@ -122,7 +143,8 @@ public static class StubOs
     // Line 4096 (512)   typed line being run
     // In   4608 (4096)  typed input not yet split into lines
     // Num  8704 (32)    a number being printed
-    // Name 8800 (128)   the program file build writes to
+    // Name 8800 (128)   the program file build writes to, or the file new writes
+    // Out name 8928 (128)  the program new's file builds into
     // Scratch 16384 (65536)  file lists, job lists, build errors
     // Out  131072 (1114112)  output waiting to go to the terminal
     // Data 1245184 (1114112) a file being written
@@ -142,6 +164,7 @@ public static class StubOs
           (import "sb_v5" "job_kill" (func $job_kill (param i32) (result i32)))
           (import "sb_v5" "build" (func $build (param i32 i32 i32 i32 i32 i32) (result i32)))
           (import "sb_v5" "man" (func $man (param i32 i32 i32 i32) (result i32)))
+          (import "sb_v5" "scaffold" (func $scaffold (param i32 i32 i32 i32) (result i32)))
 
           (memory (export "memory") 36)
           @data
@@ -523,6 +546,80 @@ public static class StubOs
             (call $out (i32.const 16384) (call $strlen (i32.const 16384) (i32.const 4095)))
             (call $nl))
 
+          ;; new NAME [KIND]: writes NAME.wire, a Wire program to start from, for a kind of machine.
+          (func $new_cmd
+            (local $kind i32) (local $kind_len i32) (local $len i32) (local $base i32) (local $n i32) (local $res i32)
+            (call $split (global.get $rest) (global.get $rest_len))
+            (if (i32.eqz (global.get $w_len))
+              (then (call $out @usage_new) (return)))
+            (local.set $kind (global.get $r))
+            (local.set $kind_len (global.get $r_len))
+            (if (i32.eqz (local.get $kind_len))
+              (then
+                (local.set $kind (i32.const @k_computer_at))
+                (local.set $kind_len (i32.const @k_computer_len))))
+            ;; The file is NAME.wire, and it builds into NAME.wasm.
+            (local.set $base (global.get $w_len))
+            (if (call $ends_with (global.get $w) (global.get $w_len) @ext_wire)
+              (then (local.set $base (i32.sub (local.get $base) (i32.const 5)))))
+            (if (i32.gt_u (local.get $base) (i32.const 100))
+              (then (local.set $base (i32.const 100))))
+            (memory.copy (i32.const 8800) (global.get $w) (local.get $base))
+            (memory.copy (i32.add (i32.const 8800) (local.get $base)) @ext_wire)
+            (local.set $len (i32.add (local.get $base) (i32.const 5)))
+            (memory.copy (i32.const 8928) (global.get $w) (local.get $base))
+            (memory.copy (i32.add (i32.const 8928) (local.get $base)) @ext_wasm)
+            (if (i32.ge_s (call $fs_read (i32.const 8800) (local.get $len) (i32.const 16384) (i32.const 0)) (i32.const 0))
+              (then
+                (call $out @new_)
+                (call $out (i32.const 8800) (local.get $len))
+                (call $out @exists)
+                (return)))
+            (local.set $n
+              (call $scaffold (local.get $kind) (local.get $kind_len) (i32.const 1245184) (i32.const 1114112)))
+            (if (i32.lt_s (local.get $n) (i32.const 0))
+              (then
+                (call $out @no_kind)
+                (call $out (local.get $kind) (local.get $kind_len))
+                (call $out @kinds)
+                (return)))
+            (local.set $res (call $fs_write (i32.const 8800) (local.get $len) (i32.const 1245184) (local.get $n)))
+            (if (i32.ne (local.get $res) (i32.const 0))
+              (then
+                (call $out @new_)
+                (call $out (i32.const 8800) (local.get $len))
+                (if (i32.eq (local.get $res) (i32.const -1))
+                  (then (call $out @bad_name))
+                  (else (call $out @disk_full)))
+                (return)))
+            (call $out @wrote)
+            (call $out (i32.const 8800) (local.get $len))
+            (call $out @comma_a)
+            (call $out (local.get $kind) (local.get $kind_len))
+            (call $out @next)
+            (call $out (i32.const 8800) (local.get $len))
+            (call $out @read_it)
+            (call $out (i32.const 8800) (local.get $len))
+            (call $out @build_it)
+            (call $out (i32.const 8928) (i32.add (local.get $base) (i32.const 5)))
+            ;; Doors and cameras take it by flashing; a deck holds it; the rest run it.
+            (if (i32.or (call $eq (local.get $kind) (local.get $kind_len) @k_door)
+                  (call $eq (local.get $kind) (local.get $kind_len) @k_camera))
+              (then
+                (call $out @flash_it)
+                (call $out (i32.const 8928) (i32.add (local.get $base) (i32.const 5)))
+                (call $out @man_flash)
+                (return)))
+            (if (call $eq (local.get $kind) (local.get $kind_len) @k_deck)
+              (then
+                (call $out @hold_it)
+                (call $out (i32.const 8928) (i32.add (local.get $base) (i32.const 5)))
+                (call $out @man_deck)
+                (return)))
+            (call $out @run_it)
+            (call $out (i32.const 8928) (i32.add (local.get $base) (i32.const 5)))
+            (call $nl))
+
           (func $man_cmd
             (local $n i32) (local $room i32)
             (local.set $room (call $room))
@@ -555,6 +652,7 @@ public static class StubOs
             (if (call $is @k_append) (then (call $write (i32.const 1)) (return (i32.const 0))))
             (if (call $is @k_rm) (then (call $rm) (return (i32.const 0))))
             (if (call $is @k_build) (then (call $build_cmd) (return (i32.const 0))))
+            (if (call $is @k_new) (then (call $new_cmd) (return (i32.const 0))))
             (if (call $is @k_run) (then (return (call $run))))
             (if (call $is @k_jobs) (then (call $jobs) (return (i32.const 0))))
             (if (call $is @k_kill) (then (call $kill) (return (i32.const 0))))
@@ -671,7 +769,13 @@ public static class StubOs
             if (!offsets.TryGetValue(m.Groups[1].Value, out var s))
                 throw new InvalidOperationException($"The stub OS uses a string it doesn't have: {m.Value}");
 
-            return $"(i32.const {s.Offset}) (i32.const {s.Length})";
+            // @name is the string's address and length; @name_at and @name_len are each on its own.
+            return m.Groups[2].Value switch
+            {
+                "_at" => s.Offset.ToString(),
+                "_len" => s.Length.ToString(),
+                _ => $"(i32.const {s.Offset}) (i32.const {s.Length})",
+            };
         });
     }
 

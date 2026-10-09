@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Text;
+using Content.Server._CyberPunk.Wire;
 
 namespace Content.Server._CyberPunk.Wasm;
 
@@ -185,7 +186,7 @@ public static class Kernel
         new("man", "(param $topic i32 $len i32 $buf i32 $cap i32) (result i32)", KernelScope.Any, 2,
             "Copies a manual page into buf (an empty topic lists them); returns its full length, or -1 for no such page."),
         new("scaffold", "(param $kind i32 $len i32 $buf i32 $cap i32) (result i32)", KernelScope.Any, 2,
-            "Copies a starting Wire program for a kind of machine (computer, door, camera or ice) into buf; returns its full length, or -1."),
+            "Copies a starting Wire program for a kind of machine (computer, door, camera, ice, deck or implant) into buf; returns its full length, or -1."),
         new("wire_program", "(param $buf i32 $cap i32) (result i32)", KernelScope.Any, 2,
             "Kept for programs built for the old Wire runtime; always -1, since Wire now builds straight to WebAssembly."),
         new("device_io", "(param $port i32 $buf i32 $len i32) (result i32)", KernelScope.Any, 0,
@@ -307,7 +308,7 @@ public static class Kernel
     private static string KernelPage()
     {
         var page = new StringBuilder(
-            $"LOW-LEVEL KERNEL FUNCTIONS (every machine)\n\nThese are for programs written in WAT (man wat).\n\nImport them from \"{Module(ApiVersion)}\", as in\n  (import \"{Module(ApiVersion)}\" \"clock_ms\" (func $clock (result i64)))\nPointers and lengths are into the program's own memory, and every one is checked.\n\n");
+            $"LOW-LEVEL KERNEL FUNCTIONS (every machine)\n\nThese are for programs written in WAT (man wat); Wire programs use modules (man modules).\n\nImport them from \"{Module(ApiVersion)}\", as in\n  (import \"{Module(ApiVersion)}\" \"clock_ms\" (func $clock (result i64)))\nPointers and lengths are into the program's own memory, and every one is checked.\n\n");
 
         foreach (var f in Functions.Where(f => f.Scope == KernelScope.Any))
         {
@@ -343,6 +344,7 @@ public static class Kernel
             page.Append($"  {h.Signature}\n      {h.Doc}\n");
         }
 
+        page.Append('\n').Append(WireManual.Device(Topic(kind)));
         return page.ToString();
     }
 
@@ -357,6 +359,7 @@ public static class Kernel
             page.Append(Describe(f));
         }
 
+        page.Append('\n').Append(WireManual.Device("ice"));
         return page.ToString();
     }
 
@@ -375,6 +378,7 @@ public static class Kernel
         }
 
         page.Append($"\nA program must also export its memory: (memory (export \"memory\") 1).\n{Limits}\n");
+        page.Append('\n').Append(WireManual.Hooks());
         return page.ToString();
     }
 
@@ -387,11 +391,14 @@ public static class Kernel
           write FILE TEXT...         write text to a file (replacing it)
           append FILE TEXT...        add a line of text to a file
           rm FILE                    delete a file
+          new NAME [KIND]            start a Wire program, NAME.wire, for a computer
+                                     (or a door, camera, ice, deck or implant)
+          build FILE.wire [OUT.wasm] build a program (man wire)
           run FILE [ARGS...]         run a program
           run FILE [ARGS...] &       run it as a background job: it runs alongside
                                      the shell, without the terminal's input
           jobs, kill N               list the background jobs, stop one
-          build FILE.wat [OUT.wasm]  build a program (man wat)
+          build FILE.wat [OUT.wasm]  build a program written in WAT (man wat)
           man [TOPIC]                these pages
           echo, uptime, ver
 
@@ -446,6 +453,8 @@ public static class Kernel
     private const string IndexPage = """
         MANUAL
 
+          man wire       the Wire programming language
+          man modules    what Wire programs can call on every machine
           man computer   what only computers have
           man door       what door controllers have, and their hook
           man camera     what cameras have
@@ -488,6 +497,10 @@ public static class Kernel
                 return ShellPage;
             case "wat":
                 return WatPage;
+            case "wire":
+                return WireManual.Reference();
+            case "modules":
+                return WireManual.Modules();
             case "flash":
                 return FlashPage;
             case "firmware":
@@ -506,11 +519,11 @@ public static class Kernel
     }
 
     /// <summary>
-    /// A starting Wire program for a kind of machine. Null until the Wire compiler arrives.
+    /// A starting Wire program for a kind of machine, or null if there's none for it.
     /// </summary>
     public static string? Scaffold(string kind)
     {
-        return null;
+        return WireManual.Scaffold(kind);
     }
 
     /// <summary>
