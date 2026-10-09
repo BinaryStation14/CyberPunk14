@@ -8,8 +8,8 @@ using Robust.Shared.Console;
 namespace Content.Server._CyberPunk.Machines;
 
 /// <summary>
-/// Works a WASM machine from the console until terminals have a window of their own: shows its screen and
-/// programs, types at it, and writes files to its disk.
+/// Works a WASM machine from the console, for admins and tests: shows its screen and programs, types at it, and
+/// writes files to its disk.
 /// </summary>
 [AdminCommand(AdminFlags.Debug)]
 public sealed partial class MachineCommand : LocalizedEntityCommands
