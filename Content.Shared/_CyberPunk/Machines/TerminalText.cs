@@ -12,6 +12,12 @@ public static class TerminalText
     /// <summary>Clears the screen.</summary>
     public const char Clear = '\x0c';
 
+    /// <summary>
+    /// Marks where a full-screen program such as nano has its cursor: the terminal highlights the character
+    /// after the last one on the screen.
+    /// </summary>
+    public const char Cursor = '\x11';
+
     /// <summary>How much output a terminal keeps for people who open it later, in characters.</summary>
     public const int ScrollbackLimit = 16 * 1024;
 

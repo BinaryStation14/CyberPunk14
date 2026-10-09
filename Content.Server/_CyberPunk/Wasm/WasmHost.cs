@@ -117,6 +117,10 @@ public sealed class WasmHost : IDisposable
         }
 
         Os = Compile(os ?? WireCompiler.Compile(DefaultOs.Source));
+        foreach (var name in SystemPrograms.Names)
+        {
+            AddSystemProgram(name, WireCompiler.Compile(SystemPrograms.Source(name)!));
+        }
     }
 
     /// <summary>

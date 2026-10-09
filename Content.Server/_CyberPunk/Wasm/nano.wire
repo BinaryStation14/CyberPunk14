@@ -1,0 +1,389 @@
+# nano: the text editor that comes with the OS. `nano FILE` edits a file a
+# whole screen at a time, in the terminal's raw mode: every key comes
+# straight here, and the screen is drawn afresh after each.
+#
+# Ctrl+O saves, Ctrl+X exits (asking to save changes), Ctrl+K cuts lines
+# and Ctrl+U pastes them, Ctrl+G shows help.
+#
+# It is a Wire program like any other: `new mynano nano` copies it to change.
+
+ROWS = 24
+COLS = 80
+# Lines of text on screen, under the title and over the status line and the
+# two lines of shortcuts.
+PAGE = ROWS - 4
+WIDTH = COLS - 1     # characters of a line on screen, leaving room to type
+INDENT = 4           # spaces Tab types, and Enter adds after a ":"
+CURSOR = chr(17)     # the terminal highlights the character after this
+
+def ctrl(letter):
+    return ord(letter) - ord("a") + 1
+
+CTRL_C = ctrl("c")
+CTRL_G = ctrl("g")
+CTRL_K = ctrl("k")
+CTRL_O = ctrl("o")
+CTRL_U = ctrl("u")
+CTRL_X = ctrl("x")
+
+# The file, a list of lines, each a list of its characters.
+file = ""
+lines = [[]]
+
+# The cursor (line and character), and the first line and column on screen.
+row = 0
+col = 0
+top = 0
+left = 0
+
+modified = False
+cut = []
+cutting = False      # whether the last key cut a line, so the next cut adds to it
+
+# What the keys do: "edit", "ask_save" (exiting with changes: save them?),
+# "ask_name" (typing a name to save under) or "help".
+mode = "edit"
+name = []
+exit_after_save = False
+message = ""
+
+HELP = "\n".join([
+    "  CP nano 1.0 help",
+    "",
+    "  nano edits text a screen at a time. Type to insert text; the cursor",
+    "  is the highlighted character.",
+    "",
+    "  Ctrl+O     Write the file out (save)",
+    "  Ctrl+X     Exit (it asks first if there are unsaved changes)",
+    "  Ctrl+K     Cut the current line (cut again to add the next one)",
+    "  Ctrl+U     Paste the cut lines above the cursor",
+    "  Ctrl+G     This help",
+    "  arrows     Move; Home and End go to the ends of the line,",
+    "             PageUp and PageDown a screen at a time",
+    "  Tab        Four spaces (Enter keeps the indentation, and adds four",
+    "             after a line ending in :)",
+    "  Enter, Backspace, Delete work as usual",
+    "",
+    "  Programs are written in Wire: see `man wire` once you exit.",
+    "",
+    "",
+    "",
+    "",
+    "  Press any key to go back to the file.",
+])
+
+
+# ---- Text
+
+def chars(text):
+    out = []
+    for c in text:
+        out.append(c)
+    return out
+
+# Text right-aligned in a space of width characters.
+def right(text, width):
+    if len(text) >= width:
+        return text
+    return " " * (width - len(text)) + text
+
+
+# ---- Files
+
+# Reads the file to edit. False if it can't be edited.
+def open_file():
+    args = sys.args().split()
+    if len(args) > 0:
+        file = args[0]
+    data = None
+    if file != "":
+        data = fs.read(file)
+    if data == None:
+        message = "[ New file ]"
+        return True
+    if data.startswith(chr(0) + "asm"):
+        print("nano: " + file + " is a program, not text")
+        return False
+    lines = []
+    for text in data.replace(chr(13), "").split("\n"):
+        lines.append(chars(text))
+    # A file's last line ends with a newline, which starts no line of its own.
+    if len(lines) > 1 and len(lines[len(lines) - 1]) == 0:
+        lines.pop()
+    message = "[ Read " + str(len(lines)) + " lines ]"
+    return True
+
+def save():
+    texts = []
+    for chars_of in lines:
+        texts.append("".join(chars_of))
+    if fs.write(file, "\n".join(texts) + "\n"):
+        modified = False
+        message = "[ Wrote " + str(len(lines)) + " lines ]"
+        return True
+    message = "[ Error writing " + file + ": " + sys.error() + " ]"
+    return False
+
+
+# ---- Keys
+
+def clamp():
+    if row >= len(lines):
+        row = len(lines) - 1
+    if row < 0:
+        row = 0
+    if col > len(lines[row]):
+        col = len(lines[row])
+
+# Whether a key is a character to type.
+def typed(key):
+    return key >= 32 and key != 127 and key < 1114112
+
+# Handles a key. False when it's time to exit.
+def key(k):
+    was = mode
+    mode = "edit"
+    if was == "help":
+        return True
+    if was == "ask_save":
+        return ask_save(k)
+    if was == "ask_name":
+        return ask_name(k)
+    edit(k)
+    return mode != "exit"
+
+def ask_save(k):
+    if k == ord("y") or k == ord("Y"):
+        if file == "":
+            mode = "ask_name"
+            name = []
+            exit_after_save = True
+            return True
+        return not save()
+    if k == ord("n") or k == ord("N"):
+        return False
+    if k == CTRL_C:
+        message = "[ Cancelled ]"
+    else:
+        mode = "ask_save"
+    return True
+
+def ask_name(k):
+    if k == term.ENTER:
+        if len(name) > 0:
+            file = "".join(name)
+            if save() and exit_after_save:
+                return False
+        exit_after_save = False
+        return True
+    if k == CTRL_C:
+        message = "[ Cancelled ]"
+        exit_after_save = False
+        return True
+    if k == term.BACKSPACE:
+        if len(name) > 0:
+            name.pop()
+    elif typed(k) and len(name) < 32:
+        name.append(chr(k))
+    mode = "ask_name"
+    return True
+
+def edit(k):
+    was_cutting = cutting
+    cutting = False
+    line = lines[row]
+    if k == CTRL_X:
+        if modified:
+            mode = "ask_save"
+        else:
+            mode = "exit"
+    elif k == CTRL_O:
+        if file == "":
+            mode = "ask_name"
+            name = []
+        else:
+            save()
+    elif k == CTRL_G:
+        mode = "help"
+    elif k == CTRL_K:
+        if len(lines) > 1:
+            gone = lines.pop(row)
+        else:
+            gone = lines[0]
+            lines[0] = []
+        if not was_cutting:
+            cut = []
+        cut.append(gone)
+        cutting = True
+        modified = True
+        col = 0
+    elif k == CTRL_U:
+        for i in range(len(cut)):
+            lines.insert(row + i, cut[i] + [])
+        row += len(cut)
+        col = 0
+        if len(cut) > 0:
+            modified = True
+    elif k == term.UP:
+        row -= 1
+    elif k == term.DOWN:
+        row += 1
+    elif k == term.LEFT:
+        if col > 0:
+            col -= 1
+        elif row > 0:
+            row -= 1
+            col = len(lines[row])
+    elif k == term.RIGHT:
+        if col < len(line):
+            col += 1
+        elif row + 1 < len(lines):
+            row += 1
+            col = 0
+    elif k == term.HOME:
+        col = 0
+    elif k == term.END:
+        col = len(line)
+    elif k == term.PAGE_UP:
+        row -= PAGE
+    elif k == term.PAGE_DOWN:
+        row += PAGE
+    elif k == term.ENTER:
+        new_line(line)
+    elif k == term.BACKSPACE:
+        if col > 0:
+            col -= 1
+            line.pop(col)
+            modified = True
+        elif row > 0:
+            lines.pop(row)
+            row -= 1
+            col = len(lines[row])
+            for c in line:
+                lines[row].append(c)
+            modified = True
+    elif k == term.DELETE:
+        if col < len(line):
+            line.pop(col)
+            modified = True
+        elif row + 1 < len(lines):
+            for c in lines.pop(row + 1):
+                line.append(c)
+            modified = True
+    elif k == term.TAB:
+        for i in range(INDENT):
+            line.insert(col, " ")
+        col += INDENT
+        modified = True
+    elif typed(k):
+        line.insert(col, chr(k))
+        col += 1
+        modified = True
+    clamp()
+
+# Splits the line at the cursor. The new line keeps this one's indentation,
+# and goes one step further in after a ":" (a Wire block).
+def new_line(line):
+    indent = 0
+    while indent < col and line[indent] == " ":
+        indent += 1
+    before = col - 1
+    while before >= 0 and line[before] == " ":
+        before -= 1
+    if before >= 0 and line[before] == ":":
+        indent += INDENT
+    rest = []
+    while len(line) > col:
+        rest.append(line.pop(col))
+    next_line = [" "] * indent
+    for c in rest:
+        if len(next_line) == indent and c == " ":
+            continue
+        next_line.append(c)
+    lines.insert(row + 1, next_line)
+    row += 1
+    col = indent
+    modified = True
+
+
+# ---- Screen
+
+# Draws the whole screen afresh.
+def draw():
+    term.clear()
+    if mode == "help":
+        term.write(HELP)
+        return
+
+    # Scroll so the cursor is on screen.
+    if row < top:
+        top = row
+    if row >= top + PAGE:
+        top = row + 1 - PAGE
+    if col < left:
+        left = col
+    if col >= left + WIDTH:
+        left = col + 1 - WIDTH
+
+    shown = file
+    if shown == "":
+        shown = "New Buffer"
+    title = "  CP nano 1.0      File: " + shown
+    flag = ""
+    if modified:
+        flag = "Modified"
+    screen = [title + right(flag, COLS - 2 - len(title))]
+
+    for i in range(PAGE):
+        at = top + i
+        if at >= len(lines):
+            screen.append("")
+            continue
+        line = lines[at]
+        piece = []
+        j = left
+        while j < len(line) and j < left + WIDTH:
+            piece.append(line[j])
+            j += 1
+        if at == row:
+            # The character the cursor is on (or a space past the end) comes
+            # after the mark.
+            while len(piece) <= col - left:
+                piece.append(" ")
+            piece.insert(col - left, CURSOR)
+        screen.append("".join(piece))
+
+    if mode == "ask_save":
+        screen.append("Save modified buffer?  Y Yes   N No   ^C Cancel")
+    elif mode == "ask_name":
+        screen.append("File Name to Write: " + "".join(name) + CURSOR + " ")
+    else:
+        place = "line " + str(row + 1) + "/" + str(len(lines)) + ", col " + str(col + 1)
+        screen.append(message + right(place, COLS - 2 - len(message)))
+    screen.append("^G Help    ^O Write Out    ^K Cut    ^U Paste")
+    screen.append("^X Exit    arrows, Home, End, PgUp, PgDn move")
+    message = ""
+    term.write("\n".join(screen))
+
+
+# ---- Hooks
+
+def tick():
+    changed = False
+    k = term.key()
+    while k != None:
+        changed = True
+        if not key(k):
+            term.raw(False)
+            term.clear()
+            sys.exit()
+            return
+        k = term.key()
+    if changed:
+        draw()
+
+if open_file():
+    term.raw(True)
+    draw()
+else:
+    sys.exit(1)

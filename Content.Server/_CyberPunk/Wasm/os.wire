@@ -30,6 +30,7 @@ HELP = [
     "write FILE TEXT...         write text to a file (replacing it)",
     "append FILE TEXT...        add a line of text to a file",
     "rm FILE                    delete a file",
+    "nano FILE                  edit a text file",
     "new NAME [KIND]            start a Wire program, NAME.wire (man shell)",
     "build FILE [OUT.wasm]      build a program from Wire (or WAT)",
     "run FILE [ARGS...] [&]     run a program (& in the background)",
@@ -207,7 +208,7 @@ def rm(name):
 def new(rest):
     words = rest.split()
     if len(words) == 0 or len(words) > 2:
-        say("usage: new NAME [computer|door|camera|ice|deck|implant|os]\n")
+        say("usage: new NAME [computer|door|camera|ice|deck|implant|os|nano]\n")
         return
     kind = "computer"
     if len(words) == 2:
@@ -220,10 +221,15 @@ def new(rest):
         return
     text = sys.scaffold(kind)
     if text == None:
-        say("new: no program for " + kind + " (computer, door, camera, ice, deck, implant or os)\n")
+        say("new: no program for " + kind + " (computer, door, camera, ice, deck, implant, os or nano)\n")
         return
     if not fs.write(file, text):
         say("new: " + file + ": " + sys.error() + "\n")
+        return
+    if kind == "nano":
+        say("wrote " + file + ", nano's source. Next:\n")
+        say("  build " + file + "   build it into " + program + "\n")
+        say("  run " + program + " FILE   edit with it\n")
         return
     if kind == "os":
         say("wrote " + file + ", the operating system's source. Next:\n")
@@ -386,6 +392,8 @@ def command(line):
         build(rest)
     elif word == "run":
         return run(rest)
+    elif word == "nano":
+        return run("nano " + rest)
     elif word == "jobs":
         jobs()
     elif word == "kill":

@@ -37,6 +37,9 @@ public sealed partial class TerminalScreen : Control
     private readonly List<string> _lines = new();
     private string _screen = "";
     private int _scroll;
+
+    /// <summary>Where a program marked its cursor (<see cref="TerminalText.Cursor"/>), as a row and column.</summary>
+    private (int Row, int Column)? _cursor;
     private TimeSpan _blink;
     private readonly List<int> _pressed = new();
     private GameTick _sentTick;
@@ -83,6 +86,17 @@ public sealed partial class TerminalScreen : Control
     private void Refresh()
     {
         _lines.Clear();
+        _cursor = null;
+        var mark = _screen.LastIndexOf(TerminalText.Cursor);
+        if (mark >= 0)
+        {
+            // The cursor is wherever the next character after the text before the mark would go.
+            WrapLines(_screen[..mark], Columns, _lines);
+            var column = _lines[^1].EnumerateRunes().Count();
+            _cursor = column == Columns ? (_lines.Count, 0) : (_lines.Count - 1, column);
+            _lines.Clear();
+        }
+
         WrapLines(_screen, Columns, _lines);
         _scroll = 0;
     }
@@ -152,17 +166,28 @@ public sealed partial class TerminalScreen : Control
         for (var i = first; i <= last; i++)
         {
             var x = padding;
+            var column = 0;
             foreach (var rune in _lines[i].EnumerateRunes())
             {
-                _font.DrawChar(handle, rune, new Vector2(x, y + ascent), scale, Foreground);
+                // A program's cursor shows as the character under it, the other way round.
+                var color = Foreground;
+                if (_cursor == (i, column))
+                {
+                    handle.DrawRect(UIBox2.FromDimensions(x, y, cell, lineHeight), Foreground);
+                    color = Background;
+                }
+
+                _font.DrawChar(handle, rune, new Vector2(x, y + ascent), scale, color);
                 x += cell;
+                column++;
             }
 
             y += lineHeight;
         }
 
-        // A block cursor after the last character, blinking while the screen has the keyboard.
-        if (_scroll == 0 && HasKeyboardFocus() && _blink.TotalSeconds % 1 < 0.5 && _lines.Count > 0)
+        // A block cursor after the last character, blinking while the screen has the keyboard, unless a program
+        // put its own somewhere.
+        if (_cursor == null && _scroll == 0 && HasKeyboardFocus() && _blink.TotalSeconds % 1 < 0.5 && _lines.Count > 0)
         {
             var column = Math.Min(Columns - 1, _lines[^1].EnumerateRunes().Count());
             var top = padding + (last - first) * lineHeight;
