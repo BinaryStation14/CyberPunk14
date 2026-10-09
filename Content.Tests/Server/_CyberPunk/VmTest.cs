@@ -270,8 +270,8 @@ public sealed class VmTest
 
         Assert.That(m.Vm.Upload(_host, "junk.bin", "not wasm at all"u8.ToArray()), Does.Contain("not a valid program"));
         Assert.That(m.Upload("future.bin",
-                """(module (import "sb_v9" "teleport" (func)) (memory (export "memory") 1) (func (export "start")))"""),
-            Does.Contain("needs host API v9"));
+                """(module (import "sb_v99" "teleport" (func)) (memory (export "memory") 1) (func (export "start")))"""),
+            Does.Contain("needs host API v99"));
         Assert.That(m.Upload("other.bin",
                 """(module (import "env" "f" (func)) (memory (export "memory") 1) (func (export "start")))"""),
             Does.Contain("imports \"env\""));
