@@ -24,6 +24,7 @@ public sealed partial class WasmMachineSystem : EntitySystem
 {
     [Dependency] private WasmHostSystem _wasm = default!;
     [Dependency] private PowerReceiverSystem _power = default!;
+    [Dependency] private SharedUserInterfaceSystem _ui = default!;
 
     /// <summary>Machine ticks a second, as in Switchboard: a program's <c>tick</c> hook runs this often.</summary>
     public const int TickRate = 30;
@@ -54,6 +55,13 @@ public sealed partial class WasmMachineSystem : EntitySystem
         SubscribeLocalEvent<WasmMachineComponent, MapInitEvent>(OnMapInit);
         SubscribeLocalEvent<WasmMachineComponent, ComponentShutdown>(OnShutdown);
         SubscribeLocalEvent<WasmMachineComponent, PowerChangedEvent>(OnPowerChanged);
+
+        Subs.BuiEvents<WasmMachineComponent>(MachineTerminalUiKey.Key, subs =>
+        {
+            subs.Event<MachineTerminalRefreshMessage>(OnTerminalRefresh);
+            subs.Event<MachineTerminalLineMessage>(OnTerminalLine);
+            subs.Event<MachineTerminalKeyMessage>(OnTerminalKey);
+        });
     }
 
     public override void Shutdown()
@@ -101,7 +109,7 @@ public sealed partial class WasmMachineSystem : EntitySystem
         else
         {
             vm.PowerOff();
-            CollectOutput(ent.Comp);
+            CollectOutput(ent);
         }
     }
 
@@ -109,7 +117,7 @@ public sealed partial class WasmMachineSystem : EntitySystem
     {
         ent.Comp.Vm!.PowerOn(_wasm.Host);
         ent.Comp.LastRun = _tick;
-        CollectOutput(ent.Comp);
+        CollectOutput(ent);
     }
 
     /// <summary>
@@ -169,7 +177,7 @@ public sealed partial class WasmMachineSystem : EntitySystem
                 continue;
 
             if (machine.Vm.State == VmState.Off)
-                CollectOutput(machine);
+                CollectOutput((uid, machine));
             else
                 _due.Add((uid, machine));
         }
@@ -184,11 +192,12 @@ public sealed partial class WasmMachineSystem : EntitySystem
         var host = _wasm.Host;
         var budget = FuelPerTick;
         _watch.Restart();
-        foreach (var (_, machine) in _due)
+        foreach (var ent in _due)
         {
             if (budget < WasmHost.FuelPerCall || _watch.Elapsed >= TimePerTick)
                 break;
 
+            var machine = ent.Comp;
             var vm = machine.Vm!;
 
             // However long it waited, its clock moves on by that much.
@@ -201,16 +210,43 @@ public sealed partial class WasmMachineSystem : EntitySystem
             vm.TakeDeviceCommands();
             vm.TakeFlash();
 
-            CollectOutput(machine);
+            CollectOutput(ent);
         }
     }
 
-    private static void CollectOutput(WasmMachineComponent machine)
+    /// <summary>
+    /// Adds what a machine's programs printed to its screen, and sends it to everyone with its terminal open.
+    /// </summary>
+    private void CollectOutput(Entity<WasmMachineComponent> ent)
     {
-        var text = machine.Vm?.TakeOutput();
+        var text = ent.Comp.Vm?.TakeOutput();
         if (string.IsNullOrEmpty(text))
             return;
 
-        machine.Screen = TerminalText.Apply(machine.Screen, ref machine.Raw, text);
+        ent.Comp.Screen = TerminalText.Apply(ent.Comp.Screen, ref ent.Comp.Raw, text);
+
+        if (_ui.IsUiOpen(ent.Owner, MachineTerminalUiKey.Key))
+            _ui.ServerSendUiMessage(ent.Owner, MachineTerminalUiKey.Key, new MachineTerminalOutputMessage(text));
+    }
+
+    private void OnTerminalRefresh(Entity<WasmMachineComponent> ent, ref MachineTerminalRefreshMessage args)
+    {
+        CollectOutput(ent);
+        _ui.ServerSendUiMessage(ent.Owner,
+            MachineTerminalUiKey.Key,
+            new MachineTerminalScreenMessage(ent.Comp.Screen, ent.Comp.Raw),
+            args.Actor);
+    }
+
+    private void OnTerminalLine(Entity<WasmMachineComponent> ent, ref MachineTerminalLineMessage args)
+    {
+        // Messages come from clients, so the line may be missing.
+        if (args.Line is { } line)
+            TypeLine(ent, line);
+    }
+
+    private void OnTerminalKey(Entity<WasmMachineComponent> ent, ref MachineTerminalKeyMessage args)
+    {
+        TypeKey(ent, args.Key);
     }
 }

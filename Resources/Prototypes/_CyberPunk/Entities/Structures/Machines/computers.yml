@@ -9,4 +9,47 @@
       readme.txt: |
         This computer runs WebAssembly programs.
         Type `help` for the shell's commands, and `man` for the manual.
+        Try `build keys.wat` and `run keys.wasm` to see raw mode.
       hello.wat: (module (import "sb_v5" "term_write" (func $write (param i32 i32))) (memory (export "memory") 1) (data (i32.const 0) "Hello from a program!\n") (func (export "start") (call $write (i32.const 0) (i32.const 22))))
+      keys.wat: |
+        ;; Raw mode: prints the code of each key pressed, until Ctrl+Q.
+        (module
+          (import "sb_v5" "term_raw" (func $raw (param i32)))
+          (import "sb_v5" "term_key" (func $key (result i32)))
+          (import "sb_v5" "term_write" (func $write (param i32 i32)))
+          (import "sb_v5" "exit" (func $exit (param i32)))
+          (memory (export "memory") 1)
+          (data (i32.const 0) "Raw mode: each key you press shows its code. Ctrl+Q quits.\n")
+          (data (i32.const 100) "key ")
+          (func (export "start")
+            (call $raw (i32.const 1))
+            (call $write (i32.const 0) (i32.const 59)))
+          (func (export "tick")
+            (local $k i32) (local $p i32) (local $n i32)
+            (block $done
+              (loop $next
+                (local.set $k (call $key))
+                (br_if $done (i32.lt_s (local.get $k) (i32.const 0)))
+                (if (i32.eq (local.get $k) (i32.const 17))
+                  (then
+                    (call $raw (i32.const 0))
+                    (call $exit (i32.const 0))
+                    (return)))
+                ;; The code in decimal, written backwards from a newline at 120.
+                (i32.store8 (i32.const 120) (i32.const 10))
+                (local.set $p (i32.const 120))
+                (local.set $n (local.get $k))
+                (loop $digit
+                  (local.set $p (i32.sub (local.get $p) (i32.const 1)))
+                  (i32.store8 (local.get $p) (i32.add (i32.const 48) (i32.rem_u (local.get $n) (i32.const 10))))
+                  (local.set $n (i32.div_u (local.get $n) (i32.const 10)))
+                  (br_if $digit (local.get $n)))
+                (call $write (i32.const 100) (i32.const 4))
+                (call $write (local.get $p) (i32.sub (i32.const 121) (local.get $p)))
+                (br $next)))))
+  - type: ActivatableUI
+    key: enum.MachineTerminalUiKey.Key
+  - type: UserInterface
+    interfaces:
+      enum.MachineTerminalUiKey.Key:
+        type: MachineTerminalBoundUserInterface
