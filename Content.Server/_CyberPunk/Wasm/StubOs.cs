@@ -48,6 +48,8 @@ public static class StubOs
 
         """;
 
+    private static readonly Regex StringRef = new("@([a-z_]+)");
+
     /// <summary>
     /// The strings the shell prints and the command names it knows.
     /// </summary>
@@ -664,7 +666,7 @@ public static class StubOs
             throw new InvalidOperationException($"The stub OS's strings take {offset} bytes, past {StringsEnd}.");
 
         var wat = Template.Replace("@data", data.ToString().TrimEnd());
-        return Regex.Replace(wat, "@([a-z_]+)", m =>
+        return StringRef.Replace(wat, m =>
         {
             if (!offsets.TryGetValue(m.Groups[1].Value, out var s))
                 throw new InvalidOperationException($"The stub OS uses a string it doesn't have: {m.Value}");
