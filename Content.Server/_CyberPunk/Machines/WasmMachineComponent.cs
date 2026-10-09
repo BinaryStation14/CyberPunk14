@@ -34,12 +34,6 @@ public sealed partial class WasmMachineComponent : Component
     public string Screen = "";
 
     /// <summary>
-    /// Whether its terminal is in raw mode.
-    /// </summary>
-    [ViewVariables]
-    public bool Raw;
-
-    /// <summary>
     /// The machine tick it last ran in.
     /// </summary>
     [ViewVariables]

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Linq;
 using System.Text;
 using Content.Server._CyberPunk.Wasm;
 using Content.Server.Power.EntitySystems;
@@ -60,8 +61,7 @@ public sealed partial class WasmMachineSystem : EntitySystem
         {
             subs.Event<BoundUIOpenedEvent>(OnTerminalOpened);
             subs.Event<MachineTerminalRefreshMessage>(OnTerminalRefresh);
-            subs.Event<MachineTerminalLineMessage>(OnTerminalLine);
-            subs.Event<MachineTerminalKeyMessage>(OnTerminalKey);
+            subs.Event<MachineTerminalKeysMessage>(OnTerminalKeys);
         });
     }
 
@@ -133,7 +133,7 @@ public sealed partial class WasmMachineSystem : EntitySystem
     }
 
     /// <summary>
-    /// Presses a key at a machine's terminal, for a program in raw mode.
+    /// Presses a key at a machine's terminal.
     /// </summary>
     public void TypeKey(Entity<WasmMachineComponent> ent, int key)
     {
@@ -224,7 +224,7 @@ public sealed partial class WasmMachineSystem : EntitySystem
         if (string.IsNullOrEmpty(text))
             return;
 
-        ent.Comp.Screen = TerminalText.Apply(ent.Comp.Screen, ref ent.Comp.Raw, text);
+        ent.Comp.Screen = TerminalText.Apply(ent.Comp.Screen, text);
 
         if (_ui.IsUiOpen(ent.Owner, MachineTerminalUiKey.Key))
             _ui.ServerSendUiMessage(ent.Owner, MachineTerminalUiKey.Key, new MachineTerminalOutputMessage(text));
@@ -248,19 +248,19 @@ public sealed partial class WasmMachineSystem : EntitySystem
         CollectOutput(ent);
         _ui.ServerSendUiMessage(ent.Owner,
             MachineTerminalUiKey.Key,
-            new MachineTerminalScreenMessage(ent.Comp.Screen, ent.Comp.Raw),
+            new MachineTerminalScreenMessage(ent.Comp.Screen),
             actor);
     }
 
-    private void OnTerminalLine(Entity<WasmMachineComponent> ent, ref MachineTerminalLineMessage args)
+    private void OnTerminalKeys(Entity<WasmMachineComponent> ent, ref MachineTerminalKeysMessage args)
     {
-        // Messages come from clients, so the line may be missing.
-        if (args.Line is { } line)
-            TypeLine(ent, line);
-    }
+        // Messages come from clients, so the keys may be missing.
+        if (args.Keys is not { } keys)
+            return;
 
-    private void OnTerminalKey(Entity<WasmMachineComponent> ent, ref MachineTerminalKeyMessage args)
-    {
-        TypeKey(ent, args.Key);
+        foreach (var key in keys.Take(WasmHost.KeyLimit))
+        {
+            TypeKey(ent, key);
+        }
     }
 }

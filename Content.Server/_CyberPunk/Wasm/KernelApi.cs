@@ -343,11 +343,7 @@ internal sealed class KernelApi
         Def("term_write", (c, ptr, len) =>
         {
             var bytes = ReadBytes(c, ptr, Math.Min(len, WasmHost.OutputPerTick + 1));
-
-            // Raw mode is switched by the kernel, not by text.
-            var text = Encoding.UTF8.GetString(bytes).Replace(TerminalText.RawOn.ToString(), "")
-                .Replace(TerminalText.RawOff.ToString(), "");
-            Io(c).Write(text);
+            Io(c).Write(Encoding.UTF8.GetString(bytes));
         });
 
         Def("term_read", (c, buf, cap) =>

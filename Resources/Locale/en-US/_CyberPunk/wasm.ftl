@@ -14,4 +14,3 @@ cmd-machine-ps = {$state}, up {$clock} ms. Terminal: {$programs}. Jobs: {$jobs}
 cmd-machine-write-failed = Couldn't write the file: {$error}
 
 machine-terminal-title = Terminal
-machine-terminal-placeholder = Type a command and press Enter
