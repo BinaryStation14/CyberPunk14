@@ -1,0 +1,87 @@
+# Things in cyberspace (CyberspaceSystem): the nodes on the pads of networked machines, and the barriers that
+# keep walkers to the paths.
+
+- type: entity
+  id: CyberspaceBarrier
+  name: static
+  description: The noise between the paths of cyberspace. Nothing gets through it.
+  categories: [ HideSpawnMenu ]
+  components:
+  - type: Physics
+    bodyType: Static
+  - type: Fixtures
+
+- type: entity
+  abstract: true
+  id: CyberNodeBase
+  name: node
+  description: A machine on the network, as it stands in cyberspace.
+  components:
+  - type: CyberNode
+  - type: Sprite
+    sprite: _CyberPunk/Cyberspace/node.rsi
+    state: diamond
+    drawdepth: Objects
+    noRot: true
+  - type: Clickable
+
+- type: entity
+  parent: CyberNodeBase
+  id: CyberNodeBackbone
+  categories: [ HideSpawnMenu ]
+  description: The backbone of the city's network, joining every network to every other.
+  components:
+  - type: Sprite
+    state: backbone
+    color: "#F2E5FF"
+    scale: 2, 2
+
+- type: entity
+  parent: CyberNodeBase
+  id: CyberNodeRouter
+  categories: [ HideSpawnMenu ]
+  components:
+  - type: Sprite
+    state: circle
+    color: "#FF4DE6"
+
+- type: entity
+  parent: CyberNodeBase
+  id: CyberNodeSwitch
+  categories: [ HideSpawnMenu ]
+  components:
+  - type: Sprite
+    state: square
+    color: "#4DE6FF"
+
+- type: entity
+  parent: CyberNodeBase
+  id: CyberNodeComputer
+  categories: [ HideSpawnMenu ]
+  components:
+  - type: Sprite
+    color: "#4DFF73"
+
+- type: entity
+  parent: CyberNodeBase
+  id: CyberNodeDoorController
+  categories: [ HideSpawnMenu ]
+  components:
+  - type: Sprite
+    color: "#FFBF33"
+
+- type: entity
+  parent: CyberNodeBase
+  id: CyberNodeCamera
+  categories: [ HideSpawnMenu ]
+  components:
+  - type: Sprite
+    color: "#FF8066"
+
+- type: entity
+  parent: CyberNodeBase
+  id: CyberNodeDevice
+  categories: [ HideSpawnMenu ]
+  components:
+  - type: Sprite
+    color: "#999999"

@@ -1,0 +1,35 @@
+# The tiles of cyberspace (CyberspaceSystem). Only data, node and bus tiles are walked on; static is seen but
+# walled off, and void is no tile at all.
+
+- type: tile
+  abstract: true
+  id: BaseCyberTile
+  isSubfloor: false
+  indestructible: true
+  heatCapacity: 10000
+  footstepSounds:
+    collection: FootstepFloor
+
+- type: tile
+  id: CyberData
+  parent: BaseCyberTile
+  name: tiles-cyber-data
+  sprite: /Textures/_CyberPunk/Tiles/Cyberspace/data.png
+
+- type: tile
+  id: CyberNode
+  parent: BaseCyberTile
+  name: tiles-cyber-node
+  sprite: /Textures/_CyberPunk/Tiles/Cyberspace/node.png
+
+- type: tile
+  id: CyberBus
+  parent: BaseCyberTile
+  name: tiles-cyber-bus
+  sprite: /Textures/_CyberPunk/Tiles/Cyberspace/bus.png
+
+- type: tile
+  id: CyberStatic
+  parent: BaseCyberTile
+  name: tiles-cyber-static
+  sprite: /Textures/_CyberPunk/Tiles/Cyberspace/static.png

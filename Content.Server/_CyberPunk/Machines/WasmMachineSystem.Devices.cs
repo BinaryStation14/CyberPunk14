@@ -38,6 +38,9 @@ public sealed partial class WasmMachineSystem
 
     private readonly List<EntityUid> _anchored = new();
 
+    /// <summary>The machines with a UI standing on each data cable, for working out what's linked to what.</summary>
+    private readonly Dictionary<EntityUid, List<EntityUid>> _cableDevices = new();
+
     /// <summary>The UI messages each component type takes, read from the event bus when first needed.</summary>
     private Dictionary<Type, List<Type>>? _uiMessages;
 
@@ -72,6 +75,7 @@ public sealed partial class WasmMachineSystem
         Dictionary<object, List<EntityUid>> members)
     {
         _devices.Clear();
+        _cableDevices.Clear();
         var cables = EntityQueryEnumerator<DataCableComponent, TransformComponent>();
         while (cables.MoveNext(out var cableUid, out var cable, out var xform))
         {
@@ -89,7 +93,14 @@ public sealed partial class WasmMachineSystem
             _map.GetAnchoredEntities((gridUid, grid), tile, _anchored);
             foreach (var uid in _anchored)
             {
-                if (!IsDevice(uid) || !_devices.Add(uid))
+                if (!IsDevice(uid))
+                    continue;
+
+                if (!_cableDevices.TryGetValue(cableUid, out var onCable))
+                    _cableDevices[cableUid] = onCable = new List<EntityUid>();
+
+                onCable.Add(uid);
+                if (!_devices.Add(uid))
                     continue;
 
                 if (!members.TryGetValue(network, out var list))
