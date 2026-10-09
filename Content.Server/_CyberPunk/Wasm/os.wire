@@ -1,0 +1,457 @@
+# The CyberPunk14 OS: the shell every computer boots, unless its disk has a
+# boot.wasm of its own (man boot). It is a Wire program like any other.
+#
+# To make your own, change a copy and boot it:
+#     new myos os
+#     build myos.wire boot.wasm
+#     reboot
+# If it won't start, or stops, the computer boots this one instead until it is
+# rebooted; `rm boot.wasm` then `reboot` puts things back.
+
+NAME = "CyberPunk14 OS 1.0"
+PROMPT = "$ "
+
+# The terminal takes 4 KiB a tick, so long output (a file, a manual page)
+# waits in this queue and goes out a few hundred lines a second.
+BUDGET = 1000
+queue = []
+queue_at = 0
+
+# Whether a program we started has the terminal. The shell's tick only runs
+# again once it has ended.
+waiting = False
+
+HELP = [
+    "help                       this list",
+    "man [TOPIC]                the manual (start here)",
+    "ls [FOLDER]                list files (and folders)",
+    "cat FILE                   show a file",
+    "cp FROM TO                 copy a file (TO . copies it here)",
+    "write FILE TEXT...         write text to a file (replacing it)",
+    "append FILE TEXT...        add a line of text to a file",
+    "rm FILE                    delete a file",
+    "new NAME [KIND]            start a Wire program, NAME.wire (man shell)",
+    "build FILE [OUT.wasm]      build a program from Wire (or WAT)",
+    "run FILE [ARGS...] [&]     run a program (& in the background)",
+    "jobs, kill N               background jobs: list, stop one",
+    "flash ADDR FILE.wasm       put a program on a door or camera",
+    "hold FILE, push [ADDR] FILE  on a deck: hold a program, copy a file",
+    "hostname [NAME]            show or set this computer's network name",
+    "hosts, ip                  names the router knows; this address",
+    "echo TEXT...               print text",
+    "uptime, ver, reboot        time since boot, versions, restart",
+]
+
+
+# ---- Output
+
+# Queues text for the terminal.
+def say(text):
+    if len(text) <= BUDGET:
+        queue.append(text)
+        return
+    # Long text goes a line at a time, so it can be spread over ticks.
+    pieces = text.split("\n")
+    last = len(pieces) - 1
+    for i in range(len(pieces)):
+        piece = pieces[i]
+        if i < last:
+            piece += "\n"
+        if piece != "":
+            queue.append(piece)
+
+# Sends as much of the queue as this tick allows.
+def flush():
+    room = BUDGET
+    while queue_at < len(queue):
+        piece = queue[queue_at]
+        if len(piece) > room and room < BUDGET:
+            return
+        term.write(piece)
+        room -= len(piece)
+        queue_at += 1
+    queue = []
+    queue_at = 0
+
+def busy():
+    return queue_at < len(queue)
+
+
+# ---- Helpers
+
+# The name without ext on its end.
+def without(name, ext):
+    if not name.endswith(ext):
+        return name
+    parts = name.split(ext)
+    parts.pop()
+    return ext.join(parts)
+
+# Text padded with spaces to a width, on the right (or the left).
+def pad(text, width):
+    if len(text) < width:
+        return text + " " * (width - len(text))
+    return text
+
+def pad_left(text, width):
+    if len(text) < width:
+        return " " * (width - len(text)) + text
+    return text
+
+# The first word of a line and the rest, trimmed.
+def first(line):
+    parts = line.strip().split(" ", 1)
+    if len(parts) == 1:
+        return [parts[0], ""]
+    return [parts[0], parts[1].strip()]
+
+def is_deck():
+    return sys.device() == "deck"
+
+
+# ---- Commands
+
+def ls(folder):
+    while folder.endswith("/"):
+        folder = without(folder, "/")
+    prefix = ""
+    if folder != "":
+        prefix = folder + "/"
+    folders = {}
+    shown = 0
+    for name in fs.files():
+        inside = name
+        if prefix != "":
+            if not name.startswith(prefix):
+                continue
+            inside = name.split(prefix, 1)[1]
+        if "/" in inside:
+            sub = inside.split("/", 1)[0]
+            folders[sub] = folders.get(sub, 0) + 1
+            continue
+        say(pad(inside, 24) + " " + pad_left(str(fs.size(name)), 7) + " bytes\n")
+        shown += 1
+    for sub in folders.keys():
+        count = folders[sub]
+        files = " files\n"
+        if count == 1:
+            files = " file\n"
+        say(pad(sub + "/", 24) + " " + pad_left(str(count), 7) + files)
+    if shown == 0 and len(folders) == 0:
+        if folder == "":
+            say("(no files)\n")
+        else:
+            say("ls: " + folder + ": no such folder\n")
+
+def cat(name):
+    if name == "":
+        say("usage: cat FILE\n")
+        return
+    text = fs.read(name)
+    if text == None:
+        say("cat: " + name + ": no such file\n")
+        return
+    say(text)
+    if text != "" and not text.endswith("\n"):
+        say("\n")
+
+def cp(rest):
+    words = rest.split()
+    if len(words) != 2:
+        say("usage: cp FROM TO   (TO . keeps the name, here)\n")
+        return
+    source = words[0]
+    data = fs.read(source)
+    if data == None:
+        say("cp: " + source + ": no such file\n")
+        return
+    names = source.split("/")
+    base = names[len(names) - 1]
+    target = words[1]
+    while target.endswith("/") and target != "/":
+        target = without(target, "/")
+    if target == "." or target == "/":
+        target = base
+    else:
+        for name in fs.files():
+            if name.startswith(target + "/"):
+                target = target + "/" + base
+                break
+    if fs.write(target, data):
+        say("copied " + source + " to " + target + "\n")
+    else:
+        say("cp: " + target + ": " + sys.error() + "\n")
+
+def write(command, rest):
+    parts = first(rest)
+    name = parts[0]
+    if name == "":
+        say("usage: " + command + " FILE TEXT...\n")
+        return
+    data = parts[1] + "\n"
+    if command == "append":
+        old = fs.read(name)
+        if old != None:
+            data = old + data
+    if fs.write(name, data):
+        say("wrote " + str(fs.size(name)) + " bytes to " + name + "\n")
+    else:
+        say(command + ": " + sys.error() + " \"" + name + "\"\n")
+
+def rm(name):
+    if name == "":
+        say("usage: rm FILE\n")
+    elif not fs.delete(name):
+        say("rm: " + name + ": no such file\n")
+
+def new(rest):
+    words = rest.split()
+    if len(words) == 0 or len(words) > 2:
+        say("usage: new NAME [computer|door|camera|ice|deck|implant|os]\n")
+        return
+    kind = "computer"
+    if len(words) == 2:
+        kind = words[1]
+    base = without(words[0], ".wire")
+    file = base + ".wire"
+    program = base + ".wasm"
+    if fs.size(file) != None:
+        say("new: " + file + " already exists\n")
+        return
+    text = sys.scaffold(kind)
+    if text == None:
+        say("new: no program for " + kind + " (computer, door, camera, ice, deck, implant or os)\n")
+        return
+    if not fs.write(file, text):
+        say("new: " + file + ": " + sys.error() + "\n")
+        return
+    if kind == "os":
+        say("wrote " + file + ", the operating system's source. Next:\n")
+        say("  cat " + file + "   read it\n")
+        say("  build " + file + " boot.wasm   build it to boot\n")
+        say("  reboot   boot it (man boot)\n")
+        return
+    say("wrote " + file + ", a " + kind + " program. Next:\n")
+    say("  cat " + file + "   read it\n")
+    say("  build " + file + "   build it into " + program + "\n")
+    if kind == "door" or kind == "camera":
+        say("  flash ADDR " + program + "   (man flash)\n")
+    elif kind == "deck":
+        say("  hold " + program + "   (man deck)\n")
+    else:
+        say("  run " + program + "\n")
+
+def build(rest):
+    words = rest.split()
+    if len(words) == 0 or len(words) > 2:
+        say("usage: build FILE.wire [OUT.wasm]   (or FILE.wat)\n")
+        return
+    source = words[0]
+    program = without(without(source, ".wire"), ".wat") + ".wasm"
+    if len(words) == 2:
+        program = words[1]
+    size = sys.build(source, program)
+    if size == None:
+        say("build: " + source + ": " + sys.error() + "\n")
+    else:
+        say("built " + program + " (" + str(size) + " bytes)\n")
+
+# run FILE [ARGS...] [&]. True if a program took over the terminal.
+def run(rest):
+    background = rest.endswith("&")
+    if background:
+        rest = without(rest, "&").strip()
+    parts = first(rest)
+    file = parts[0]
+    if file == "":
+        say("usage: run FILE [ARGS...] [&]\n")
+        return False
+    if background:
+        job = sys.start(file, parts[1])
+        if job == None:
+            say("run: " + file + ": " + sys.error() + "\n")
+        else:
+            say("[" + str(job) + "] " + file + "\n")
+        return False
+    if sys.run(file, parts[1]):
+        return True
+    say("run: " + file + ": " + sys.error() + "\n")
+    return False
+
+def jobs():
+    running = sys.jobs()
+    if len(running) == 0:
+        say("(no background jobs)\n")
+    for job in running:
+        say("[" + str(job.id) + "] " + job.name + "\n")
+
+def kill(rest):
+    id = int(rest.replace("%", ""))
+    if id == None:
+        say("usage: kill N   (a job's number, from `jobs`)\n")
+    elif sys.kill(id):
+        say("stopping job " + str(id) + "\n")
+    else:
+        say("kill: no job " + str(id) + " (see `jobs`)\n")
+
+def flash(rest):
+    words = rest.split()
+    if len(words) != 2:
+        say("usage: flash ADDR FILE.wasm\n")
+    elif sys.flash(words[0], words[1]):
+        say("flashing " + words[1] + " to " + words[0] + "...\n")
+    else:
+        say("flash: " + sys.error() + "\n")
+
+def hold(rest):
+    words = rest.split()
+    if len(words) != 1:
+        say("usage: hold FILE   (a program, on a deck)\n")
+    elif not is_deck():
+        say("hold: only a deck, in cyberspace, has hands to hold programs\n")
+    elif not deck.hold(words[0]):
+        say("hold: " + words[0] + " isn't a program\n")
+
+def push(rest):
+    words = rest.split()
+    if len(words) == 0 or len(words) > 2:
+        say("usage: push FILE (onto the computer you stand at) or push ADDR FILE\n")
+        return
+    if not is_deck():
+        say("push: only a deck can push files\n")
+        return
+    to = None
+    if len(words) == 2:
+        to = net.resolve(words[0])
+        if to == None:
+            say("push: no machine called " + words[0] + "\n")
+            return
+    file = words[len(words) - 1]
+    if not deck.push(to, file):
+        say("push: there's no " + file + "\n")
+
+def hostname(rest):
+    if rest != "":
+        if not net.set_hostname(rest):
+            say("hostname: a name is 1 to 32 of a-z, 0-9 and -\n")
+        return
+    name = net.hostname()
+    if name == None:
+        say("(no hostname: set one with `hostname NAME`)\n")
+    else:
+        say(name + "\n")
+
+def hosts():
+    known = net.hosts()
+    if len(known) == 0:
+        say("(no hostnames known on this network)\n")
+    for name in known.keys():
+        say(name + " " + known[name] + "\n")
+
+def ip():
+    address = net.address()
+    if address == None:
+        say("ip: no address (the network needs a powered router)\n")
+    else:
+        say(address + "\n")
+
+# Runs one command line. True if a program took over the terminal.
+def command(line):
+    parts = first(line)
+    word = parts[0]
+    rest = parts[1]
+    if word == "":
+        pass
+    elif word == "help":
+        say("\n".join(HELP) + "\n")
+    elif word == "man":
+        page = sys.man(rest)
+        if page == None:
+            say("man: no page on " + rest + " (try `man`)\n")
+        else:
+            say(page)
+    elif word == "ls":
+        ls(rest)
+    elif word == "cat":
+        cat(rest)
+    elif word == "cp":
+        cp(rest)
+    elif word == "write" or word == "append":
+        write(word, rest)
+    elif word == "rm":
+        rm(rest)
+    elif word == "new":
+        new(rest)
+    elif word == "build":
+        build(rest)
+    elif word == "run":
+        return run(rest)
+    elif word == "jobs":
+        jobs()
+    elif word == "kill":
+        kill(rest)
+    elif word == "flash":
+        flash(rest)
+    elif word == "hold":
+        hold(rest)
+    elif word == "push":
+        push(rest)
+    elif word == "hostname":
+        hostname(rest)
+    elif word == "hosts":
+        hosts()
+    elif word == "ip":
+        ip()
+    elif word == "echo":
+        say(rest + "\n")
+    elif word == "uptime":
+        say("up " + str(sys.clock() / 1000) + " s\n")
+    elif word == "ver":
+        say(NAME + ", kernel v" + str(sys.version()) + "\n")
+    elif word == "reboot":
+        sys.reboot()
+        return True
+    else:
+        say(word + ": unknown command (try `help`)\n")
+    return False
+
+
+# ---- Hooks
+
+def tick():
+    if waiting:
+        waiting = False
+        say(PROMPT)
+    # Typed lines wait until the output before them is out.
+    if not busy():
+        line = term.read_line()
+        if line != None:
+            say(line + "\n")
+            if command(line):
+                waiting = True
+            else:
+                say(PROMPT)
+    flush()
+
+
+# ---- Boot
+
+say(NAME + " (kernel v" + str(sys.version()) + ")\n")
+say("Type `help` for commands, `man` for the manual.\n")
+if is_deck():
+    say("This is your deck. `cat readme.txt` to begin.\n")
+
+# A file named autorun has commands to run at boot, one a line. One that runs
+# a program at the terminal is the last.
+autorun = fs.read("autorun")
+if autorun != None:
+    for autorun_line in autorun.split("\n"):
+        if waiting:
+            break
+        autorun_line = autorun_line.strip()
+        if autorun_line != "":
+            say("autorun: " + autorun_line + "\n")
+            waiting = command(autorun_line)
+if not waiting:
+    say(PROMPT)
+flush()

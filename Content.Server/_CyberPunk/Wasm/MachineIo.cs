@@ -82,6 +82,9 @@ public sealed class MachineIo
 
     public int? Exit;
 
+    /// <summary>A program asked to restart the machine once the call returns.</summary>
+    public bool Reboot;
+
     /// <summary>How many programs are stacked where the process being called runs, it included.</summary>
     public int Depth;
 

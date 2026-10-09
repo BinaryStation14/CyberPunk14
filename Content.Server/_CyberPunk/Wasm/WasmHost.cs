@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Security.Cryptography;
+using Content.Server._CyberPunk.Wire;
 using Wasmtime;
 using WasmStore = Wasmtime.Store;
 
@@ -91,7 +92,8 @@ public sealed class WasmHost : IDisposable
     public IReadOnlySet<string> KernelFunctions { get; }
 
     /// <summary>
-    /// A host whose machines boot <paramref name="os"/>, or the stub OS.
+    /// A host whose machines boot <paramref name="os"/>, or the <see cref="DefaultOs"/>, built from its Wire
+    /// source.
     /// </summary>
     public WasmHost(byte[]? os = null)
     {
@@ -111,7 +113,7 @@ public sealed class WasmHost : IDisposable
             _kernelModules.Add(Kernel.Module(version));
         }
 
-        Os = Compile(os ?? Module.ConvertText(StubOs.Wat));
+        Os = Compile(os ?? WireCompiler.Compile(DefaultOs.Source));
     }
 
     /// <summary>

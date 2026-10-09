@@ -207,6 +207,7 @@ internal sealed class KernelApi
         Def("power", _ => 1);
 
         Def("exit", (c, code) => Io(c).Exit = code);
+        Def("reboot", c => { Io(c).Reboot = true; });
         Def("exec", (c, name, len) => RequestExec(Io(c), ReadName(c, name, len), ""));
         Def("exec_args", (c, name, nameLen, args, argsLen) =>
         {

@@ -23,7 +23,7 @@ public sealed class MachineTerminalTest : InteractionTest
         // Open the terminal: it shows what the machine printed before it was opened.
         await Interact();
         var window = GetWindow<MachineTerminalWindow>();
-        Assert.That(window.Screen.Text, Does.Contain(StubOs.Name));
+        Assert.That(window.Screen.Text, Does.Contain(DefaultOs.Name));
         Assert.That(window.Input.Visible, Is.True);
 
         // A typed line runs on the machine, and its output reaches the window.

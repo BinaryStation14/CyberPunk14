@@ -12,7 +12,7 @@ using Wasmtime;
 namespace Content.Tests.Server._CyberPunk;
 
 /// <summary>
-/// A machine on its own: the stub OS's shell, programs, and the sandbox's limits. A misbehaving program must
+/// A machine on its own: the default OS's shell, programs, booting its own OS, and the sandbox's limits. A misbehaving program must
 /// never hang or crash the host. Ported from Switchboard's <c>sb_wasm/tests/vm.rs</c>.
 /// </summary>
 [TestFixture]
@@ -113,8 +113,8 @@ public sealed class VmTest
     {
         using var m = Machine.Boot(_host);
 
-        Assert.That(m.Screen, Does.Contain("CyberPunk14 stub OS"));
-        Assert.That(m.Screen, Does.Contain("kernel v6"));
+        Assert.That(m.Screen, Does.Contain(DefaultOs.Name));
+        Assert.That(m.Screen, Does.Contain($"kernel v{Kernel.ApiVersion}"));
         Assert.That(m.Vm.State, Is.EqualTo(VmState.Running));
         Assert.That(m.Vm.Processes, Is.EqualTo(new[] { "os" }));
     }
@@ -135,7 +135,7 @@ public sealed class VmTest
         Assert.That(m.Command("echo hi there"), Does.Contain("hi there\n"));
         Assert.That(m.Command("write ../evil x"), Does.Contain("write: bad file name"));
         Assert.That(m.Command("frobnicate"), Does.Contain("frobnicate: unknown command"));
-        Assert.That(m.Command("ver"), Does.Contain("CyberPunk14 stub OS 0.1, kernel v6"));
+        Assert.That(m.Command("ver"), Does.Contain($"{DefaultOs.Name}, kernel v{Kernel.ApiVersion}"));
         Assert.That(m.Command("uptime"), Does.Match(@"up \d+ s"));
         Assert.That(m.Command("help"), Does.Contain("build FILE"));
     }
@@ -362,8 +362,8 @@ public sealed class VmTest
 
         m.Vm.SeedFile("bad.wat", "(module (func (export \"start\") (i32.add)))"u8.ToArray());
         var bad = m.Command("build bad.wat");
-        Assert.That(bad, Does.Contain("build: bad.wat:\n"));
-        Assert.That(bad.Length, Is.GreaterThan("build: bad.wat:\n\n$ ".Length + "build bad.wat\n".Length));
+        Assert.That(bad, Does.Contain("build: bad.wat: "));
+        Assert.That(bad.Length, Is.GreaterThan("build: bad.wat: \n$ ".Length + "build bad.wat\n".Length));
 
         Assert.That(m.Command("build nothing.wat"), Does.Contain("build: nothing.wat: no such file"));
     }
@@ -396,7 +396,7 @@ public sealed class VmTest
         m.RunUntil("job ran");
 
         Assert.That(m.Command("run loop.wasm &"), Does.Contain("[2] loop.wasm"));
-        Assert.That(m.Command("jobs"), Does.Contain("2 loop.wasm"));
+        Assert.That(m.Command("jobs"), Does.Contain("[2] loop.wasm"));
         Assert.That(m.Vm.Jobs.Select(j => j.Id), Is.EqualTo(new uint[] { 2 }));
 
         // The shell still answers while it runs.
@@ -625,5 +625,110 @@ public sealed class VmTest
         m.Vm.PowerOn(_host);
         m.RunUntil("$ ");
         Assert.That(m.Vm.Hostname, Is.EqualTo("lab-1"));
+    }
+
+    [Test]
+    public void TheShellCopiesFilesAndListsFolders()
+    {
+        using var m = Machine.Boot(_host);
+        m.Vm.SeedFile("examples/hello.wire", "print('hi')\n"u8.ToArray());
+        m.Vm.SeedFile("examples/spin.wire", "x\n"u8.ToArray());
+
+        var all = m.Command("ls");
+        Assert.That(all, Does.Contain("examples/"));
+        Assert.That(all, Does.Contain("2 files"));
+        Assert.That(m.Command("ls examples"), Does.Match(@"hello\.wire +12 bytes"));
+        Assert.That(m.Command("ls nowhere"), Does.Contain("ls: nowhere: no such folder"));
+
+        Assert.That(m.Command("cp examples/hello.wire ."), Does.Contain("copied examples/hello.wire to hello.wire"));
+        Assert.That(m.Command("cat hello.wire"), Does.Contain("print('hi')"));
+        Assert.That(m.Command("cp hello.wire examples"), Does.Contain("to examples/hello.wire"));
+        Assert.That(m.Command("cp missing.txt x"), Does.Contain("cp: missing.txt: no such file"));
+    }
+
+    [Test]
+    public void AutorunRunsCommandsAtBoot()
+    {
+        using var m = new Machine(_host, new Vm());
+        Assert.That(m.Upload("hello.wasm", WasmSamples.Hello), Is.Null);
+        m.Vm.SeedFile("autorun", "echo first\n\nrun hello.wasm\necho never\n"u8.ToArray());
+        m.Vm.PowerOn(_host);
+        m.RunUntil("Hello from WASM!");
+        m.RunUntil("$ ");
+
+        Assert.That(m.Screen, Does.Contain("autorun: echo first\nfirst\n"));
+        Assert.That(m.Screen, Does.Contain("autorun: run hello.wasm"));
+        Assert.That(m.Screen, Does.Not.Contain("never"));
+    }
+
+    /// <summary>
+    /// An OS of a player's own: prints a line and keeps running.
+    /// </summary>
+    private const string OwnOs = """
+        (module
+          (import "sb_v0" "term_write" (func $write (param i32 i32)))
+          (memory (export "memory") 1)
+          (data (i32.const 0) "my own OS\n")
+          (func (export "start") (call $write (i32.const 0) (i32.const 10)))
+          (func (export "tick")))
+        """;
+
+    [Test]
+    public void ABootFileReplacesTheOs()
+    {
+        using var m = new Machine(_host, new Vm());
+        Assert.That(m.Upload(Vm.BootFile, OwnOs), Is.Null);
+        m.Vm.PowerOn(_host);
+        m.RunUntil("my own OS");
+
+        Assert.That(m.Vm.Processes, Is.EqualTo(new[] { Vm.BootFile }));
+        Assert.That(m.Screen, Does.Not.Contain(DefaultOs.Name));
+    }
+
+    [Test]
+    public void ABootFileThatWontLoadFallsBackToTheDefaultOs()
+    {
+        using var m = new Machine(_host, new Vm());
+        m.Vm.SeedFile(Vm.BootFile, "not a program"u8.ToArray());
+        m.Vm.PowerOn(_host);
+        m.RunUntil("$ ");
+
+        Assert.That(m.Screen, Does.Contain($"[{Vm.BootFile} won't boot: not a valid program"));
+        Assert.That(m.Vm.Processes, Is.EqualTo(new[] { "os" }));
+    }
+
+    [Test]
+    public void ABootFileThatStopsFallsBackUntilARestart()
+    {
+        // An OS that ends at once: the machine boots the default OS after it, instead of it again.
+        using var m = new Machine(_host, new Vm());
+        Assert.That(m.Upload(Vm.BootFile, """(module (memory (export "memory") 1) (func (export "start")))"""), Is.Null);
+        m.Vm.PowerOn(_host);
+        m.RunUntil($"[{Vm.BootFile} stopped: starting the default OS]");
+        m.RunUntil("$ ");
+        Assert.That(m.Vm.Processes, Is.EqualTo(new[] { "os" }));
+
+        // A fixed one boots on reboot.
+        Assert.That(m.Upload(Vm.BootFile, OwnOs), Is.Null);
+        m.Screen = "";
+        m.Vm.TypeLine("reboot");
+        m.RunUntil("my own OS");
+        Assert.That(m.Screen, Does.Contain("[rebooting]"));
+        Assert.That(m.Vm.Processes, Is.EqualTo(new[] { Vm.BootFile }));
+    }
+
+    [Test]
+    public void RebootRestartsTheMachine()
+    {
+        using var m = Machine.Boot(_host);
+        Assert.That(m.Upload("loop.wasm", Loop), Is.Null);
+        m.Command("run loop.wasm &");
+        Assert.That(m.Vm.Jobs, Has.Count.EqualTo(1));
+
+        var screen = m.Command("reboot");
+        Assert.That(screen, Does.Contain("[rebooting]"));
+        Assert.That(screen, Does.Contain(DefaultOs.Name));
+        Assert.That(m.Vm.Jobs, Is.Empty);
+        Assert.That(m.Vm.Processes, Is.EqualTo(new[] { "os" }));
     }
 }

@@ -74,10 +74,10 @@ public sealed record KernelHook(string Name, string Signature, KernelScope Scope
 public static class Kernel
 {
     /// <summary>
-    /// The newest kernel version. Programs import from <c>sb_v0</c> up to <c>sb_v6</c>, and every one is
+    /// The newest kernel version. Programs import from <c>sb_v0</c> up to <c>sb_v7</c>, and every one is
     /// provided, so programs built against an older kernel keep working.
     /// </summary>
-    public const int ApiVersion = 6;
+    public const int ApiVersion = 7;
 
     /// <summary>
     /// The screen is 80 columns; manual pages are wrapped to fit.
@@ -144,7 +144,7 @@ public static class Kernel
     public static readonly IReadOnlyList<KernelFunction> Functions = new KernelFunction[]
     {
         new("api_version", "(result i32)", KernelScope.Any, 0,
-            "The kernel's version (5 on this machine)."),
+            $"The kernel's version ({ApiVersion} on this machine)."),
         new("device_type", "(result i32)", KernelScope.Any, 2,
             "What this machine is: 0 a computer, 1 a door controller, 2 a camera, 3 a deck, 4 an implant."),
         new("clock_ms", "(result i64)", KernelScope.Any, 0,
@@ -153,6 +153,8 @@ public static class Kernel
             "1 while the machine has power (always, while anything runs)."),
         new("exit", "(param $code i32)", KernelScope.Any, 0,
             "Ends the program once the current call returns."),
+        new("reboot", "", KernelScope.Any, 7,
+            "Restarts the machine once the current call returns: everything running stops, and it boots afresh (from boot.wasm on its disk, if there is one: man boot)."),
         new("exec", "(param $name i32 $len i32) (result i32)", KernelScope.Any, 0,
             "Runs the program in a file once the current call returns; it takes over until it exits. 0 ok, -1 no such file, -2 not a program, -3 too many running."),
         new("exec_args", "(param $name i32 $len i32 $args i32 $args_len i32) (result i32)", KernelScope.Any, 1,
@@ -194,7 +196,7 @@ public static class Kernel
         new("man", "(param $topic i32 $len i32 $buf i32 $cap i32) (result i32)", KernelScope.Any, 2,
             "Copies a manual page into buf (an empty topic lists them); returns its full length, or -1 for no such page."),
         new("scaffold", "(param $kind i32 $len i32 $buf i32 $cap i32) (result i32)", KernelScope.Any, 2,
-            "Copies a starting Wire program for a kind of machine (computer, door, camera, ice, deck or implant) into buf; returns its full length, or -1."),
+            "Copies a starting Wire program for a kind of machine (computer, door, camera, ice, deck or implant), or the operating system's own source for os, into buf; returns its full length, or -1."),
         new("wire_program", "(param $buf i32 $cap i32) (result i32)", KernelScope.Any, 2,
             "Kept for programs built for the old Wire runtime; always -1, since Wire now builds straight to WebAssembly."),
         new("device_io", "(param $port i32 $buf i32 $len i32) (result i32)", KernelScope.Any, 0,
@@ -393,22 +395,52 @@ public static class Kernel
     private const string ShellPage = """
         THE SHELL
 
+        The operating system every computer boots is a Wire program: `new myos os`
+        copies its source, to read or to make your own (man boot).
+
           help                       the commands
-          ls                         list the disk's files
+          ls [FOLDER]                list the disk's files (and folders)
           cat FILE                   show a file
+          cp FROM TO                 copy a file (TO . copies it out of its folder)
           write FILE TEXT...         write text to a file (replacing it)
           append FILE TEXT...        add a line of text to a file
           rm FILE                    delete a file
           new NAME [KIND]            start a Wire program, NAME.wire, for a computer
-                                     (or a door, camera, ice, deck or implant)
+                                     (or a door, camera, ice, deck or implant; os
+                                     for the operating system's own source)
           build FILE.wire [OUT.wasm] build a program (man wire)
           run FILE [ARGS...]         run a program
           run FILE [ARGS...] &       run it as a background job: it runs alongside
                                      the shell, without the terminal's input
           jobs, kill N               list the background jobs, stop one
           build FILE.wat [OUT.wasm]  build a program written in WAT (man wat)
+          flash ADDR FILE.wasm       put a program on a door or camera (man flash)
+          hold FILE, push [ADDR] FILE  on a deck (man deck)
+          hostname [NAME], hosts, ip this computer's name, the network's, its address
           man [TOPIC]                these pages
-          echo, uptime, ver
+          echo, uptime, ver, reboot
+
+        A file named autorun holds commands the shell runs when it boots, one a
+        line; one that runs a program at the terminal is the last it runs.
+
+        """;
+
+    private const string BootPage = """
+        BOOT
+
+        A computer boots boot.wasm from its own disk if it has one, and the
+        operating system it came with if not. So you can swap the OS:
+
+          new myos os                 copy the OS's Wire source to myos.wire
+          build myos.wire boot.wasm   build your version to boot
+          reboot                      restart and boot it
+
+        If boot.wasm won't load, or ends or crashes, the computer starts the OS
+        it came with instead, until it is rebooted or loses power: so a broken
+        OS can't lock you out. `rm boot.wasm` then `reboot` puts things back.
+
+        An OS is a program like any other (man hooks): its tick runs while it is
+        in front, and it starts other programs with sys.run.
 
         """;
 
@@ -471,6 +503,7 @@ public static class Kernel
           man ice        ICE: guarding a network in cyberspace
           man hooks      when the machine runs a program's code
           man shell      the shell's commands
+          man boot       swapping the operating system
           man flash      putting programs on devices
           man firmware   what doors and cameras do out of the box
           man kernel     low-level kernel functions
@@ -505,6 +538,9 @@ public static class Kernel
                 return ShellPage;
             case "wat":
                 return WatPage;
+            case "boot":
+            case "os":
+                return BootPage;
             case "wire":
                 return WireManual.Reference();
             case "modules":
@@ -527,11 +563,12 @@ public static class Kernel
     }
 
     /// <summary>
-    /// A starting Wire program for a kind of machine, or null if there's none for it.
+    /// A starting Wire program for a kind of machine, or the default OS's own source for <c>os</c>; null if
+    /// there's none for it.
     /// </summary>
     public static string? Scaffold(string kind)
     {
-        return WireManual.Scaffold(kind);
+        return kind.Trim() == "os" ? DefaultOs.Source : WireManual.Scaffold(kind);
     }
 
     /// <summary>

@@ -49,7 +49,7 @@ public sealed class WasmMachineTest : GameTest
         {
             var machine = entManager.GetComponent<WasmMachineComponent>(computer);
             Assert.That(machine.Vm!.State, Is.EqualTo(VmState.Running));
-            Assert.That(machine.Screen, Does.Contain(StubOs.Name));
+            Assert.That(machine.Screen, Does.Contain(DefaultOs.Name));
 
             machines.TypeLine((computer, machine), "run hello.wat");
             machines.TypeLine((computer, machine), "build hello.wat");
