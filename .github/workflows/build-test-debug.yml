@@ -20,7 +20,8 @@ jobs:
         os: [ubuntu-latest]
 
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    # CyberPunk14: upstream uses 30. Our runners are slower, and the build plus integration tests didn't fit.
+    timeout-minutes: 60
 
     steps:
     - name: Checkout Master
