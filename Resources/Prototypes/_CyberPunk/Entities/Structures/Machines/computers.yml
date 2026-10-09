@@ -13,6 +13,7 @@
         Try `new hello`, `build hello.wire` and `run hello.wasm` for your first
         Wire program. The examples folder has more: `ls examples`, then `cat` one.
         The shell itself is a Wire program you can read and replace: `man boot`.
+        `examples/calc.wire` is a calculator with its own buttons (`man ui`).
         Try `build keys.wat` and `run keys.wasm` to see raw mode.
         Data cable to a powered router networks it: `ip` shows its address,
         `hostname NAME` names it, and `hosts` lists every name the router knows.
@@ -233,6 +234,94 @@
                         label = host + " " + names[host]
                     print("  " + label, found[host])
                 sys.exit(0)
+      examples/calc.wire: |
+        # calc.wire: a calculator with buttons, to show how a program draws its
+        # own UI (man ui). The terminal window shows the buttons in place of the
+        # text while it runs. Wire numbers are whole numbers, so 7 / 2 is 3.
+        #     build examples/calc.wire
+        #     run examples/calc.wasm
+
+        # The buttons, a row at a time: each is [id, text]. Ids are what come
+        # back in events when the button is clicked.
+        KEYS = [
+            [["num7", "7"], ["num8", "8"], ["num9", "9"], ["div", "/"]],
+            [["num4", "4"], ["num5", "5"], ["num6", "6"], ["mul", "*"]],
+            [["num1", "1"], ["num2", "2"], ["num3", "3"], ["sub", "-"]],
+            [["clear", "C"], ["num0", "0"], ["eq", "="], ["add", "+"]],
+        ]
+        SYMBOLS = {"add": "+", "sub": "-", "mul": "*", "div": "/"}
+
+        display = "0"     # the number on show
+        total = 0         # the number before the operation waiting
+        pending = None    # that operation's id, or None
+        fresh = True      # whether the next digit starts a new number
+
+        def calculate(a, b, op):
+            if op == "add":
+                return a + b
+            if op == "sub":
+                return a - b
+            if op == "mul":
+                return a * b
+            if b == 0:
+                return None
+            return a / b
+
+        def press(id):
+            if id == "clear":
+                display = "0"
+                total = 0
+                pending = None
+                fresh = True
+            elif id.startswith("num"):
+                if fresh or display == "0":
+                    display = id[3]
+                elif len(display) < 15:
+                    display += id[3]
+                fresh = False
+            elif display != "Error":
+                value = int(display)
+                if pending != None and not fresh:
+                    value = calculate(total, value, pending)
+                    if value == None:
+                        display = "Error"
+                        pending = None
+                        fresh = True
+                        return
+                    display = str(value)
+                total = value
+                pending = None
+                if id != "eq":
+                    pending = id
+                fresh = True
+
+        # Builds the whole UI from the state, and shows it. Showing the same UI
+        # again costs nothing, so a program can just redraw after every change.
+        def show():
+            sum = ""
+            if pending != None:
+                sum = str(total) + " " + SYMBOLS[pending]
+            rows = [ui.label(sum), ui.label(display)]
+            for keys in KEYS:
+                buttons = []
+                for key in keys:
+                    buttons.append(ui.button(key[0], key[1]))
+                rows.append(ui.row(buttons))
+            rows.append(ui.button("quit", "Quit"))
+            ui.show(ui.column(rows))
+
+        def tick():
+            for event in ui.events():
+                if event.id == "quit":
+                    ui.clear()
+                    print("calc: bye")
+                    sys.exit()
+                    return
+                press(event.id)
+            show()
+
+        print("calc: click the buttons; Quit ends it.")
+        show()
   - type: NodeContainer
     nodes:
       data:
