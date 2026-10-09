@@ -31,7 +31,10 @@ namespace Content.Shared.Power
         HighVoltage,
         MediumVoltage,
         Apc,
-        ExCable
+        ExCable,
+
+        // CyberPunk: data cable between networked machines.
+        Data,
     }
 
     [Serializable, NetSerializable]

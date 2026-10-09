@@ -90,7 +90,7 @@ public static class WireManual
         page.Append(ModuleEntries("sys"));
         page.Append("\nfs: files on this machine's disk (1 MiB, 64 files)\n");
         page.Append(ModuleEntries("fs"));
-        page.Append("\nnet: the building network (addresses look like 10.2.1.1; packets arrive the next tick, and are dropped if 64 are already waiting)\n");
+        page.Append("\nnet: the network (addresses look like 10.2.1.1, and machines can go by a hostname too; packets arrive the next tick, and are dropped if 64 are already waiting)\n");
         page.Append(ModuleEntries("net"));
         page.Append("\nterm: the terminal (computers only)\n");
         page.Append(ModuleEntries("term"));

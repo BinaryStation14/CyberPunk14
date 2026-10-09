@@ -17,4 +17,7 @@ public enum NodeGroupID : byte
     /// <seealso cref="Content.Server.Power.Generation.Teg.TegNodeGroup"/>
     Teg,
     ExCable,
+
+    // CyberPunk: data cable between networked machines.
+    Data,
 }

@@ -17,8 +17,8 @@ namespace Content.Server._CyberPunk.Machines;
 /// together share <see cref="FuelPerTick"/> and <see cref="TimePerTick"/> of real time. Machines over the
 /// budget wait for the next tick, first in line, so no number of busy computers can slow the server down. A
 /// machine that waited is told how much time passed, so its clock is always right.
-/// Machines aren't networked yet and have no devices, so what their programs send and what they tell
-/// devices to do is dropped.
+/// Packets go over the network (WasmMachineSystem.Network.cs). Machines have no devices yet, so what their
+/// programs tell devices to do is dropped.
 /// </remarks>
 public sealed partial class WasmMachineSystem : EntitySystem
 {
@@ -55,6 +55,7 @@ public sealed partial class WasmMachineSystem : EntitySystem
         SubscribeLocalEvent<WasmMachineComponent, MapInitEvent>(OnMapInit);
         SubscribeLocalEvent<WasmMachineComponent, ComponentShutdown>(OnShutdown);
         SubscribeLocalEvent<WasmMachineComponent, PowerChangedEvent>(OnPowerChanged);
+        InitializeNetwork();
 
         Subs.BuiEvents<WasmMachineComponent>(MachineTerminalUiKey.Key, subs =>
         {
@@ -86,7 +87,10 @@ public sealed partial class WasmMachineSystem : EntitySystem
                 Log.Error($"Couldn't put {name} on the disk of {ToPrettyString(ent)}: {error}");
         }
 
+        vm.Hostname = ent.Comp.Hostname;
+        ent.Comp.Hostname = vm.Hostname;
         ent.Comp.Vm = vm;
+        _networkDirty = true;
         if (_power.IsPowered(ent))
             PowerOn(ent);
     }
@@ -95,6 +99,7 @@ public sealed partial class WasmMachineSystem : EntitySystem
     {
         ent.Comp.Vm?.Dispose();
         ent.Comp.Vm = null;
+        _networkDirty = true;
     }
 
     private void OnPowerChanged(Entity<WasmMachineComponent> ent, ref PowerChangedEvent args)
@@ -170,6 +175,9 @@ public sealed partial class WasmMachineSystem : EntitySystem
         _tick++;
         _due.Clear();
 
+        if (_networkDirty)
+            RebuildNetwork();
+
         var query = EntityQueryEnumerator<WasmMachineComponent>();
         while (query.MoveNext(out var uid, out var machine))
         {
@@ -205,13 +213,21 @@ public sealed partial class WasmMachineSystem : EntitySystem
             machine.LastRun = _tick;
             budget -= Math.Min(budget, vm.Tick(host, waited * TickMs, WasmHost.FuelPerCall));
 
-            // Nothing is networked or wired to a device yet.
-            vm.TakeOutbox();
+            _sent.AddRange(vm.TakeOutbox());
+            if (vm.TakeHostnameChanged())
+            {
+                machine.Hostname = vm.Hostname;
+                _networkDirty = true;
+            }
+
+            // Nothing is wired to a device yet.
             vm.TakeDeviceCommands();
             vm.TakeFlash();
 
             CollectOutput(ent);
         }
+
+        DeliverPackets();
     }
 
     /// <summary>

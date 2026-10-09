@@ -1,0 +1,6 @@
+- type: stack
+  parent: BaseMediumStack
+  id: CableData
+  name: stack-data-cable
+  icon: { sprite: "/Textures/Objects/Tools/cable-coils.rsi", state: coil-30 }
+  spawn: CableDataStack1
