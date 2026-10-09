@@ -49,6 +49,9 @@ public sealed class WasmHost : IDisposable
     /// <summary>How long a halted or crashed OS takes to restart, in milliseconds.</summary>
     public const ulong RebootDelayMs = 3000;
 
+    /// <summary>UI events waiting to be read, at most; more are dropped.</summary>
+    public const int UiEventLimit = 64;
+
     /// <summary>The biggest packet, in bytes.</summary>
     public const int MaxPacket = 1024;
 

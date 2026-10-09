@@ -95,7 +95,29 @@ public static class WireManual
         page.Append("\nterm: the terminal (computers only)\n");
         page.Append(ModuleEntries("term"));
         page.Append("  term.ENTER, term.BACKSPACE, term.TAB, term.DELETE, term.UP, term.DOWN,\n  term.LEFT, term.RIGHT, term.HOME, term.END, term.PAGE_UP, term.PAGE_DOWN\n      The keys term.key() returns that aren't characters.\n");
+        page.Append("\nComputers can show a UI of buttons, lists and drawing instead of text: man ui.\n");
         page.Append("\nDoors, cameras, ICE, decks and implants have more: man door, man camera, man ice, man deck, man implant.\n");
+        return page.ToString();
+    }
+
+    /// <summary>
+    /// The Wire part of <c>man ui</c>: the ui module.
+    /// </summary>
+    public static string Ui()
+    {
+        var page = new StringBuilder("In Wire, the ui module builds a UI from widgets and shows it:\n\n");
+        page.Append("""
+              ui.show(ui.column([
+                  ui.label("Door control"),
+                  ui.row([ui.button("open", "Open"), ui.button("shut", "Shut")]),
+              ]))
+              def tick():
+                  for e in ui.events():
+                      if e.id == "open":
+                          net.send("door-1", 1701, "open")
+
+            """);
+        page.Append(ModuleEntries("ui"));
         return page.ToString();
     }
 

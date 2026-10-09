@@ -63,6 +63,7 @@ public sealed partial class WasmMachineSystem : EntitySystem
             subs.Event<BoundUIOpenedEvent>(OnTerminalOpened);
             subs.Event<MachineTerminalRefreshMessage>(OnTerminalRefresh);
             subs.Event<MachineTerminalKeysMessage>(OnTerminalKeys);
+            subs.Event<MachineTerminalUiEventMessage>(OnTerminalUiEvent);
         });
     }
 
@@ -232,18 +233,28 @@ public sealed partial class WasmMachineSystem : EntitySystem
     }
 
     /// <summary>
-    /// Adds what a machine's programs printed to its screen, and sends it to everyone with its terminal open.
+    /// Adds what a machine's programs printed to its screen, and sends it to everyone with its terminal open,
+    /// with the front program's UI when it has changed.
     /// </summary>
     private void CollectOutput(Entity<WasmMachineComponent> ent)
     {
+        var open = _ui.IsUiOpen(ent.Owner, MachineTerminalUiKey.Key);
         var text = ent.Comp.Vm?.TakeOutput();
-        if (string.IsNullOrEmpty(text))
+        if (!string.IsNullOrEmpty(text))
+        {
+            ent.Comp.Screen = TerminalText.Apply(ent.Comp.Screen, text);
+            if (open)
+                _ui.ServerSendUiMessage(ent.Owner, MachineTerminalUiKey.Key, new MachineTerminalOutputMessage(text));
+        }
+
+        // Each UI a program shows is a new tree, and showing the same text again keeps the old one.
+        var ui = ent.Comp.Vm?.Ui;
+        if (ReferenceEquals(ui, ent.Comp.ShownUi))
             return;
 
-        ent.Comp.Screen = TerminalText.Apply(ent.Comp.Screen, text);
-
-        if (_ui.IsUiOpen(ent.Owner, MachineTerminalUiKey.Key))
-            _ui.ServerSendUiMessage(ent.Owner, MachineTerminalUiKey.Key, new MachineTerminalOutputMessage(text));
+        ent.Comp.ShownUi = ui;
+        if (open)
+            _ui.ServerSendUiMessage(ent.Owner, MachineTerminalUiKey.Key, new MachineTerminalUiMessage(ui));
     }
 
     // A window the client opened itself asks for the screen before the server knows it's open, so that request
@@ -266,6 +277,14 @@ public sealed partial class WasmMachineSystem : EntitySystem
             MachineTerminalUiKey.Key,
             new MachineTerminalScreenMessage(ent.Comp.Screen),
             actor);
+        _ui.ServerSendUiMessage(ent.Owner, MachineTerminalUiKey.Key, new MachineTerminalUiMessage(ent.Comp.ShownUi), actor);
+    }
+
+    private void OnTerminalUiEvent(Entity<WasmMachineComponent> ent, ref MachineTerminalUiEventMessage args)
+    {
+        // Messages come from clients, so anything may be missing; the machine checks the rest.
+        if (ent.Comp.Vm is { } vm && args.Id is { } id && args.Value is { } value)
+            vm.UiEvent(id, args.Kind, value);
     }
 
     private void OnTerminalKeys(Entity<WasmMachineComponent> ent, ref MachineTerminalKeysMessage args)

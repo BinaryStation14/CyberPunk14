@@ -48,7 +48,7 @@ public static class WireLibrary
 
     public static readonly IReadOnlyList<string> Modules = new[]
     {
-        "term", "fs", "net", "sys", "door", "camera", "ice", "deck", "body",
+        "term", "fs", "net", "sys", "ui", "door", "camera", "ice", "deck", "body",
     };
 
     public static readonly IReadOnlyList<WireFunction> ModuleFunctions = new WireFunction[]
@@ -123,6 +123,34 @@ public static class WireLibrary
             "The next key pressed in raw mode, or None: a character's code (chr() turns it into text), or term.ENTER, term.UP and so on."),
         new("term.clear", "term.clear()", 0, 0, "computer",
             "Clears the screen (24 lines of 80 characters)."),
+        new("ui.show", "ui.show(widget)", 1, 1, "computer",
+            "Shows a UI in the terminal window in place of the text while this program is in front, built from the widgets below (man ui). Showing the same one again costs nothing. False if this program is a background job."),
+        new("ui.events", "ui.events()", 0, 0, "computer",
+            "What people did to the UI since last time, as a list. Each has .kind (\"click\", \"submit\" or \"select\"), .id (the widget's) and .value: an input's text, a list item's number, or where a canvas was clicked (\"X Y\")."),
+        new("ui.clear", "ui.clear()", 0, 0, "computer",
+            "Takes the UI down: the terminal shows text again."),
+        new("ui.column", "ui.column(widgets)", 1, 1, "computer",
+            "A list of widgets, top to bottom."),
+        new("ui.row", "ui.row(widgets)", 1, 1, "computer",
+            "A list of widgets, left to right."),
+        new("ui.label", "ui.label(text)", 1, 1, "computer",
+            "Text."),
+        new("ui.button", "ui.button(id, text)", 2, 2, "computer",
+            "A button: a click comes as a \"click\" event with its id."),
+        new("ui.input", "ui.input(id) / ui.input(id, text)", 1, 2, "computer",
+            "A line to type on, starting with text: Enter sends a \"submit\" event with what was typed."),
+        new("ui.list", "ui.list(id, items)", 2, 2, "computer",
+            "A list of items to pick: picking one sends a \"select\" event with its number (from 0)."),
+        new("ui.progress", "ui.progress(value, most)", 2, 2, "computer",
+            "A bar filled value of the way to most."),
+        new("ui.canvas", "ui.canvas(id, width, height, drawing)", 4, 4, "computer",
+            "A picture, up to 640 by 400, drawn from a list of ui.rect, ui.line and ui.text (0, 0 is the top left). A click sends a \"click\" event with where, as \"X Y\"."),
+        new("ui.rect", "ui.rect(x, y, width, height, color)", 5, 5, "computer",
+            "A filled rectangle on a canvas. Colors are names like \"red\" or like \"#ff8000\"."),
+        new("ui.line", "ui.line(x1, y1, x2, y2, color)", 5, 5, "computer",
+            "A line on a canvas."),
+        new("ui.text", "ui.text(x, y, text, color)", 4, 4, "computer",
+            "Text on a canvas, its top left at x, y."),
         new("door.open", "door.open()", 0, 0, "door",
             "Opens the door. False if it is bolted."),
         new("door.close", "door.close()", 0, 0, "door",

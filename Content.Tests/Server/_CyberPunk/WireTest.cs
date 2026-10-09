@@ -602,7 +602,7 @@ public sealed class WireTest
     [Test]
     public void TheManualCoversEverything()
     {
-        var all = string.Concat(new[] { "wire", "modules", "computer", "door", "camera", "ice", "deck", "implant", "hooks" }
+        var all = string.Concat(new[] { "wire", "modules", "computer", "door", "camera", "ice", "deck", "implant", "hooks", "ui" }
             .Select(topic => Kernel.Man(topic) ?? throw new AssertionException($"no page on {topic}")));
 
         // Pages are wrapped to the screen, so compare without line breaks.

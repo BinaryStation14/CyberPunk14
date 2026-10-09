@@ -1,4 +1,5 @@
 using Content.Server._CyberPunk.Wasm;
+using Content.Shared._CyberPunk.Machines;
 
 namespace Content.Server._CyberPunk.Machines;
 
@@ -44,6 +45,12 @@ public sealed partial class WasmMachineComponent : Component
     /// </summary>
     [ViewVariables]
     public string Screen = "";
+
+    /// <summary>
+    /// The program UI its terminal shows, as last sent to the people with it open; null for text.
+    /// </summary>
+    [ViewVariables]
+    public ProgramUiNode? ShownUi;
 
     /// <summary>
     /// The machine tick it last ran in.

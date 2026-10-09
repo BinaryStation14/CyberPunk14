@@ -74,10 +74,10 @@ public sealed record KernelHook(string Name, string Signature, KernelScope Scope
 public static class Kernel
 {
     /// <summary>
-    /// The newest kernel version. Programs import from <c>sb_v0</c> up to <c>sb_v7</c>, and every one is
+    /// The newest kernel version. Programs import from <c>sb_v0</c> up to <c>sb_v8</c>, and every one is
     /// provided, so programs built against an older kernel keep working.
     /// </summary>
-    public const int ApiVersion = 7;
+    public const int ApiVersion = 8;
 
     /// <summary>
     /// The screen is 80 columns; manual pages are wrapped to fit.
@@ -213,6 +213,12 @@ public static class Kernel
             "The next key pressed in raw mode, or -1: a character's code, 8 Backspace, 9 Tab, 10 Enter, 127 Delete, 1-26 Ctrl+A to Ctrl+Z, and 0x110001-0x110008 for Up, Down, Left, Right, Home, End, PageUp, PageDown."),
         new("term_clear", "", KernelScope.Computer, 2,
             "Clears the screen, for drawing it afresh."),
+        new("ui_set", "(param $text i32 $len i32 $err i32 $err_cap i32) (result i32)", KernelScope.Computer, 8,
+            "Shows a UI in the terminal window, in place of the text, while this program is in front (man ui): the text describes its widgets. 0 shown, -1 not at the terminal (a background job), -2 not a UI (why goes to err)."),
+        new("ui_event", "(param $buf i32 $cap i32) (result i32)", KernelScope.Computer, 8,
+            "Takes the next thing someone did to this program's UI: copies \"KIND ID VALUE\" into buf (KIND is click, submit or select). Returns its full length (if that's more than cap, it stays, to ask again with room), or -1 if nothing is waiting."),
+        new("ui_clear", "", KernelScope.Computer, 8,
+            "Takes this program's UI down, so the terminal shows text again."),
         new("build", "(param $src i32 $src_len i32 $out i32 $out_len i32 $err i32 $err_cap i32) (result i32)", KernelScope.Computer, 2,
             "Builds the source file src (WAT if it ends in .wat, Wire otherwise; 64 KiB at most) into the program file out. Returns its size; or -1 no such file, -2 source too big, -3 doesn't build (why, with the line, goes to err), -4 can't write out."),
         new("flash", "(param $addr i32 $name i32 $len i32) (result i32)", KernelScope.Computer, 2,
@@ -425,6 +431,43 @@ public static class Kernel
 
         """;
 
+    private static string UiPage()
+    {
+        var page = new StringBuilder("""
+            PROGRAM UIS
+
+            A program at a computer's terminal can show a UI instead of text: buttons,
+            lines to type on, lists, progress bars and a canvas to draw on. Everyone
+            at the terminal sees it, and what they do comes back to the program as
+            events. It shows while the program is in front (not from a background
+            job), and goes when the program ends. A button on the window switches
+            between the UI and the text.
+
+            A UI is text, one (kind ...) per widget:
+              (column WIDGET...)        widgets top to bottom
+              (row WIDGET...)           widgets left to right
+              (label "text")
+              (button ID "text")        sends click
+              (input ID "text")         sends submit, with the text, on Enter
+              (list ID "item"...)       sends select, with the item's number
+              (progress VALUE MOST)
+              (canvas ID W H DRAW...)   sends click, with "X Y"; draws
+                (rect X Y W H "color") (line X1 Y1 X2 Y2 "color") (text X Y "text" "color")
+            IDs are 1 to 32 of letters, digits, _ and -. Colors are names (red) or
+            #rrggbb. At most 256 widgets, 16 deep, 512 drawing operations, 32 KiB.
+
+            LOW-LEVEL KERNEL FUNCTIONS (computers only)
+
+            """);
+        foreach (var f in Functions.Where(f => f.Name.StartsWith("ui_")))
+        {
+            page.Append(Describe(f));
+        }
+
+        page.Append('\n').Append(WireManual.Ui());
+        return page.ToString();
+    }
+
     private const string BootPage = """
         BOOT
 
@@ -504,6 +547,7 @@ public static class Kernel
           man hooks      when the machine runs a program's code
           man shell      the shell's commands
           man boot       swapping the operating system
+          man ui         programs with buttons, lists and drawing
           man flash      putting programs on devices
           man firmware   what doors and cameras do out of the box
           man kernel     low-level kernel functions
@@ -541,6 +585,8 @@ public static class Kernel
             case "boot":
             case "os":
                 return BootPage;
+            case "ui":
+                return UiPage();
             case "wire":
                 return WireManual.Reference();
             case "modules":
