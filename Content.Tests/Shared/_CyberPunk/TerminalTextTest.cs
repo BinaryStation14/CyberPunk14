@@ -10,40 +10,32 @@ public sealed class TerminalTextTest
     [Test]
     public void AppendsText()
     {
-        var raw = false;
-        Assert.That(TerminalText.Apply("$ ", ref raw, "ls\nhello\n"), Is.EqualTo("$ ls\nhello\n"));
-        Assert.That(raw, Is.False);
+        Assert.That(TerminalText.Apply("$ ", "ls\nhello\n"), Is.EqualTo("$ ls\nhello\n"));
     }
 
     [Test]
     public void ClearWipesWhatCameBefore()
     {
-        var raw = false;
-        var screen = TerminalText.Apply("old\n", ref raw, $"gone{TerminalText.Clear}new");
+        var screen = TerminalText.Apply("old\n", $"gone{TerminalText.Clear}new");
         Assert.That(screen, Is.EqualTo("new"));
     }
 
     [Test]
-    public void RawModeSwitches()
+    public void BackspaceRubsOutWithinTheLine()
     {
-        var raw = false;
-        var screen = TerminalText.Apply("", ref raw, $"a{TerminalText.RawOn}b");
-        Assert.That(raw, Is.True);
-        Assert.That(screen, Is.EqualTo("ab"));
-
-        TerminalText.Apply(screen, ref raw, $"{TerminalText.RawOff}");
-        Assert.That(raw, Is.False);
+        Assert.That(TerminalText.Apply("$ ", $"lx{TerminalText.Backspace}s"), Is.EqualTo("$ ls"));
+        Assert.That(TerminalText.Apply("a\n", $"{TerminalText.Backspace}b"), Is.EqualTo("a\nb"));
+        Assert.That(TerminalText.Apply("a\U0001F600", $"{TerminalText.Backspace}"), Is.EqualTo("a"));
     }
 
     [Test]
     public void ScrollbackDropsWholeOldLines()
     {
-        var raw = false;
         var line = new string('x', 99) + "\n";
         var screen = "";
         for (var i = 0; i < 400; i++)
         {
-            screen = TerminalText.Apply(screen, ref raw, line);
+            screen = TerminalText.Apply(screen, line);
         }
 
         Assert.That(screen.Length, Is.LessThanOrEqualTo(TerminalText.ScrollbackLimit));

@@ -6,14 +6,11 @@ namespace Content.Shared._CyberPunk.Machines;
 /// </summary>
 public static class TerminalText
 {
+    /// <summary>Rubs out the last character on the line.</summary>
+    public const char Backspace = '\b';
+
     /// <summary>Clears the screen.</summary>
     public const char Clear = '\x0c';
-
-    /// <summary>Switches the terminal into raw mode: each key goes to the program as it's pressed.</summary>
-    public const char RawOn = '\x0e';
-
-    /// <summary>Switches the terminal back to whole lines.</summary>
-    public const char RawOff = '\x0f';
 
     /// <summary>How much output a terminal keeps for people who open it later, in characters.</summary>
     public const int ScrollbackLimit = 16 * 1024;
@@ -22,11 +19,10 @@ public static class TerminalText
     public const int MaxLine = 200;
 
     /// <summary>
-    /// Adds output to a screen: a clear wipes what came before it, a mode switch sets
-    /// <paramref name="raw"/>, and the rest is kept up to <see cref="ScrollbackLimit"/>, dropping whole old
-    /// lines.
+    /// Adds output to a screen: a clear wipes what came before it, a backspace rubs out the character before
+    /// it on its line, and the rest is kept up to <see cref="ScrollbackLimit"/>, dropping whole old lines.
     /// </summary>
-    public static string Apply(string screen, ref bool raw, string text)
+    public static string Apply(string screen, string text)
     {
         var builder = new System.Text.StringBuilder(screen, screen.Length + text.Length);
         foreach (var c in text)
@@ -36,11 +32,12 @@ public static class TerminalText
                 case Clear:
                     builder.Clear();
                     break;
-                case RawOn:
-                    raw = true;
-                    break;
-                case RawOff:
-                    raw = false;
+                case Backspace:
+                    if (builder.Length > 0 && builder[^1] != '\n')
+                    {
+                        var width = builder.Length > 1 && char.IsLowSurrogate(builder[^1]) ? 2 : 1;
+                        builder.Remove(builder.Length - width, width);
+                    }
                     break;
                 default:
                     builder.Append(c);

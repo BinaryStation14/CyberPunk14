@@ -23,9 +23,8 @@ public sealed class MachineTerminalBoundUserInterface : BoundUserInterface
         base.Open();
 
         _window = this.CreateWindow<MachineTerminalWindow>();
-        _window.OnLine += line => SendMessage(new MachineTerminalLineMessage(line));
-        _window.Screen.OnKey += key => SendMessage(new MachineTerminalKeyMessage(key));
-        _window.Input.GrabKeyboardFocus();
+        _window.Screen.OnKeys += keys => SendMessage(new MachineTerminalKeysMessage(keys));
+        _window.Screen.GrabKeyboardFocus();
 
         SendMessage(new MachineTerminalRefreshMessage());
     }
@@ -40,15 +39,11 @@ public sealed class MachineTerminalBoundUserInterface : BoundUserInterface
         switch (message)
         {
             case MachineTerminalScreenMessage screen:
-                _window.Screen.SetScreen(screen.Screen, screen.Raw);
+                _window.Screen.SetScreen(screen.Screen);
                 break;
             case MachineTerminalOutputMessage output:
                 _window.Screen.AddOutput(output.Text);
                 break;
-            default:
-                return;
         }
-
-        _window.UpdateMode();
     }
 }

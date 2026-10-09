@@ -22,12 +22,10 @@ public sealed class MachineTerminalRefreshMessage : BoundUserInterfaceMessage;
 public sealed class MachineTerminalScreenMessage : BoundUserInterfaceMessage
 {
     public readonly string Screen;
-    public readonly bool Raw;
 
-    public MachineTerminalScreenMessage(string screen, bool raw)
+    public MachineTerminalScreenMessage(string screen)
     {
         Screen = screen;
-        Raw = raw;
     }
 }
 
@@ -47,29 +45,15 @@ public sealed class MachineTerminalOutputMessage : BoundUserInterfaceMessage
 }
 
 /// <summary>
-/// A line typed at a machine's terminal.
+/// Keys pressed at a machine's terminal, in order, as codes from <see cref="TerminalKeys"/>.
 /// </summary>
 [Serializable, NetSerializable]
-public sealed class MachineTerminalLineMessage : BoundUserInterfaceMessage
+public sealed class MachineTerminalKeysMessage : BoundUserInterfaceMessage
 {
-    public readonly string Line;
+    public readonly int[] Keys;
 
-    public MachineTerminalLineMessage(string line)
+    public MachineTerminalKeysMessage(int[] keys)
     {
-        Line = line;
-    }
-}
-
-/// <summary>
-/// A key pressed at a machine's terminal in raw mode, as one of the codes in <see cref="TerminalKeys"/>.
-/// </summary>
-[Serializable, NetSerializable]
-public sealed class MachineTerminalKeyMessage : BoundUserInterfaceMessage
-{
-    public readonly int Key;
-
-    public MachineTerminalKeyMessage(int key)
-    {
-        Key = key;
+        Keys = keys;
     }
 }

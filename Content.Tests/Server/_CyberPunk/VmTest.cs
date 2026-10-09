@@ -460,8 +460,6 @@ public sealed class VmTest
                     (call $exit (i32.const 0))))))
             """);
 
-        // Keys are ignored until a program asks for them.
-        m.Vm.TypeKey('q');
         m.Screen = "";
         m.Vm.TypeLine("run key.wasm");
         for (var i = 0; i < 10 && !m.Vm.IsRaw; i++)
@@ -478,9 +476,42 @@ public sealed class VmTest
         m.RunUntil("got x");
         m.RunUntil("$ ");
         Assert.That(m.Vm.IsRaw, Is.False);
-        Assert.That(m.Screen, Does.Not.Contain("got q"));
-        Assert.That(m.Screen, Does.Contain(TerminalText.RawOn.ToString()));
-        Assert.That(m.Screen, Does.Contain(TerminalText.RawOff.ToString()));
+        Assert.That(m.Screen, Does.Not.Contain("ignored"));
+    }
+
+    [Test]
+    public void KeysEditTheLineOutsideRawMode()
+    {
+        using var m = Machine.Boot(_host);
+
+        void Type(string text)
+        {
+            foreach (var c in text)
+            {
+                m.Vm.TypeKey(c);
+            }
+        }
+
+        // What's typed shows as it's typed, Backspace rubs out, and Enter runs the line.
+        m.Screen = "";
+        Type("echo helo");
+        m.Vm.TypeKey(TerminalKeys.Backspace);
+        Type("lo");
+        m.Vm.TypeKey(TerminalKeys.Enter);
+        m.RunUntil("$ ");
+        var screen = TerminalText.Apply("", m.Screen);
+        Assert.That(screen, Does.StartWith("echo hello\nhello\n"));
+
+        // Up brings the last line back, and Down goes back to a new one.
+        m.Screen = "";
+        m.Vm.TypeKey(TerminalKeys.Up);
+        m.Vm.TypeKey(TerminalKeys.Down);
+        Type("echo two");
+        m.Vm.TypeKey(TerminalKeys.Up);
+        m.Vm.TypeKey(TerminalKeys.Enter);
+        m.RunUntil("$ ");
+        screen = TerminalText.Apply("", m.Screen);
+        Assert.That(screen, Does.StartWith("echo hello\nhello\n"));
     }
 
     [Test]
