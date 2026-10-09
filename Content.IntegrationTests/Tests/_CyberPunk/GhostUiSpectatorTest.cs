@@ -1,6 +1,7 @@
 using System.Linq;
 using Content.IntegrationTests.Fixtures;
 using Content.Shared.APC;
+using Content.Shared.Interaction;
 using Content.Shared.UserInterface;
 using Content.Shared.Verbs;
 using Robust.Shared.GameObjects;
@@ -87,6 +88,41 @@ public sealed class GhostUiSpectatorTest : GameTest
             Assert.That(ui.IsUiOpen(machine, key, other), Is.True);
             Assert.That(aui.CurrentSingleUser, Is.EqualTo(other));
             Assert.That(ui.IsUiOpen(machine, key, ghost), Is.True);
+        });
+    }
+
+    [Test]
+    public async Task GhostOpensByClicking()
+    {
+        var server = Pair.Server;
+        await Pair.CreateTestMap();
+        var coords = Pair.TestMap!.GridCoords;
+
+        var entManager = server.ResolveDependency<IEntityManager>();
+        var ui = entManager.System<SharedUserInterfaceSystem>();
+        var interaction = entManager.System<SharedInteractionSystem>();
+        var key = ApcUiKey.Key;
+
+        await server.WaitAssertion(() =>
+        {
+            var machine = entManager.SpawnEntity("GhostUiSpectatorTestMachine", coords);
+            var ghost = entManager.SpawnEntity("MobObserver", coords);
+            var human = entManager.SpawnEntity("MobHuman", coords);
+            var aui = entManager.GetComponent<ActivatableUIComponent>(machine);
+
+            // Left click opens it, and clicking again closes it.
+            interaction.UserInteraction(ghost, coords, machine);
+            Assert.That(ui.IsUiOpen(machine, key, ghost), Is.True);
+            Assert.That(aui.CurrentSingleUser, Is.Null);
+            interaction.UserInteraction(ghost, coords, machine);
+            Assert.That(ui.IsUiOpen(machine, key, ghost), Is.False);
+
+            // Activating it in world does the same, and still leaves the machine free for the living.
+            Assert.That(interaction.InteractionActivate(ghost, machine), Is.True);
+            Assert.That(ui.IsUiOpen(machine, key, ghost), Is.True);
+            Assert.That(interaction.InteractionActivate(human, machine), Is.True);
+            Assert.That(ui.IsUiOpen(machine, key, human), Is.True);
+            Assert.That(aui.CurrentSingleUser, Is.EqualTo(human));
         });
     }
 

@@ -57,6 +57,7 @@ namespace Content.Shared.Interaction
         [Dependency] private ISharedAdminLogManager _adminLogger = default!;
         [Dependency] private ISharedChatManager _chat = default!;
         [Dependency] private ActionBlockerSystem _actionBlockerSystem = default!;
+        [Dependency] private ActivatableUISystem _activatableUi = default!; // CyberPunk
         [Dependency] private EntityLookupSystem _lookup = default!;
         [Dependency] private SharedHandsSystem _hands = default!;
         [Dependency] private InventorySystem _inventory = default!;
@@ -202,6 +203,21 @@ namespace Content.Shared.Interaction
 
             if (aUiComp.RequiresComplex && !_actionBlockerSystem.CanComplexInteract(ev.Actor))
                 ev.Cancel();
+        }
+
+        /// <summary>
+        ///     CyberPunk: lets a spectating ghost that can't interact open a machine's UI read-only by clicking or
+        ///     activating it, with the same range and access checks as a normal activation.
+        /// </summary>
+        private bool TrySpectateUi(EntityUid user, EntityUid target, bool checkAccess)
+        {
+            if (!_uiQuery.HasComp(target) || !_activatableUi.IsSpectator(user, target))
+                return false;
+
+            if (checkAccess && (!InRangeUnobstructed(user, target) || !IsAccessible(user, target)))
+                return false;
+
+            return _activatableUi.TryOpenAsSpectator(user, target);
         }
 
         private bool UiRangeCheck(Entity<TransformComponent?> user, Entity<TransformComponent?> target, float range)
@@ -438,7 +454,12 @@ namespace Content.Shared.Interaction
             }
 
             if (checkCanInteract && !_actionBlockerSystem.CanInteract(user, target))
+            {
+                // CyberPunk: a spectating ghost's click opens the machine's UI to look at.
+                if (target != null)
+                    TrySpectateUi(user, target.Value, checkAccess);
                 return;
+            }
 
             // Check if interacted entity is in the same container, the direct child, or direct parent of the user.
             // Also checks if the item is accessible via some storage UI (e.g., open backpack)
@@ -1176,7 +1197,7 @@ namespace Content.Shared.Interaction
                 return false;
 
             if (checkCanInteract && !_actionBlockerSystem.CanInteract(user, used))
-                return false;
+                return TrySpectateUi(user, used, checkAccess); // CyberPunk
 
             if (checkAccess && !InRangeUnobstructed(user, used))
                 return false;
