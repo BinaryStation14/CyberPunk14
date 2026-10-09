@@ -367,3 +367,200 @@
     interfaces:
       enum.MachineTerminalUiKey.Key:
         type: MachineTerminalBoundUserInterface
+
+- type: entity
+  parent: ComputerProgrammable
+  id: ComputerProgrammableDev
+  suffix: Dev room
+  components:
+  - type: WasmMachine
+    files:
+      dev/readme.txt: |
+        Programs for trying out the machines in this room from a computer
+        (man dev). Build one, then run it:
+          build dev/vend.wire      then  run dev/vend.bin [ITEM]
+          build dev/heater.wire    then  run dev/heater.bin [on|off|heat|cool|auto|warmer|cooler]
+          build dev/jukebox.wire   then  run dev/jukebox.bin
+        examples/machines.wire lists every machine on the network and its calls.
+      dev/vend.wire: |
+        # dev/vend.wire: works the vending machines on this network from here.
+        #     run dev/vend.bin          lists what each one has
+        #     run dev/vend.bin ITEM     vends ITEM (an id from that list)
+
+        want = sys.args().strip()
+        queue = net.neighbours()
+        machines = []
+
+        if net.address() == None:
+            print("vend: this computer isn't on a network")
+            sys.exit(1)
+
+        # What a vending machine has, as a dict from item id to its entry.
+        def stock(host):
+            state = dev.state(host)
+            if state == None:
+                return {}
+            vending = state.get("VendingMachine")
+            if vending == None:
+                return {}
+            return vending["Inventory"]
+
+        def tick():
+            # A few machines a tick: a computer can only make so many requests at once.
+            asked = 0
+            while asked < 3 and len(queue) > 0:
+                host = queue.pop(0)
+                asked += 1
+                info = dev.info(host)
+                if info != None and str(info["kind"]).startswith("VendingMachine"):
+                    machines.append([host, info["name"]])
+            if len(queue) > 0:
+                return
+            if len(machines) == 0:
+                print("vend: there are no vending machines on this network")
+                sys.exit(1)
+            for machine in machines:
+                items = stock(machine[0])
+                if want == "":
+                    print(machine[0], machine[1])
+                    for id in sorted(items.keys()):
+                        print("   ", id, items[id]["Amount"])
+                elif want in items:
+                    if dev.call(machine[0], "vending_machine_eject", {"type": items[want]["Type"], "id": want}):
+                        print("vend: " + machine[1] + " is vending " + want)
+                    else:
+                        print("vend: " + sys.error())
+                    sys.exit(0)
+            if want != "":
+                print("vend: nothing here has " + want)
+            sys.exit(0)
+      dev/heater.wire: |
+        # dev/heater.wire: works the space heater on this network from here.
+        #     run dev/heater.bin                 shows what it's set to
+        #     run dev/heater.bin on              (or off) switches it on or off
+        #     run dev/heater.bin heat            (or cool, auto) sets its mode
+        #     run dev/heater.bin warmer          (or cooler) moves its target by 5 degrees
+
+        what = sys.args().strip()
+        queue = net.neighbours()
+        heater = None
+
+        if net.address() == None:
+            print("heater: this computer isn't on a network")
+            sys.exit(1)
+
+        # What its window shows. Nudging the target by nothing makes it say.
+        def settings():
+            dev.call(heater, "space_heater_change_temperature", {"temperature": 0})
+            state = dev.state(heater)
+            if state == None:
+                return None
+            return state["ui"]
+
+        def show():
+            s = settings()
+            if s == None:
+                print("heater: " + sys.error())
+                return
+            on = "off"
+            if s["Enabled"]:
+                on = "on"
+            print("heater " + heater + ": " + on + ", " + s["Mode"] + " mode, aiming for",
+                s["TargetTemperature"] - 273, "C")
+
+        def act():
+            if what == "":
+                pass
+            elif what == "on" or what == "off":
+                s = settings()
+                if s != None and s["Enabled"] != (what == "on"):
+                    dev.call(heater, "space_heater_toggle")
+            elif what == "heat" or what == "cool" or what == "auto":
+                dev.call(heater, "space_heater_change_mode", {"mode": what})
+            elif what == "warmer":
+                dev.call(heater, "space_heater_change_temperature", {"temperature": 5})
+            elif what == "cooler":
+                dev.call(heater, "space_heater_change_temperature", {"temperature": -5})
+            else:
+                print("heater: try on, off, heat, cool, auto, warmer or cooler")
+                sys.exit(1)
+
+        def tick():
+            asked = 0
+            while heater == None and asked < 3 and len(queue) > 0:
+                host = queue.pop(0)
+                asked += 1
+                info = dev.info(host)
+                if info != None and str(info["kind"]).startswith("SpaceHeater"):
+                    heater = host
+            if heater == None:
+                if len(queue) == 0:
+                    print("heater: there's no space heater on this network")
+                    sys.exit(1)
+                return
+            # Work it on the next tick, with this tick's requests spent on finding it.
+            if asked > 0:
+                return
+            act()
+            show()
+            sys.exit(0)
+      dev/jukebox.wire: |
+        # dev/jukebox.wire: a remote control for the jukebox on this network,
+        # with buttons (man ui).
+        #     run dev/jukebox.bin
+
+        SONGS = ["FlipFlap", "Tintin", "Thunderdome", "Constellations", "Drifting", "starlight"]
+
+        queue = net.neighbours()
+        box = None
+        status = "Looking for the jukebox..."
+
+        def show():
+            ui.show(ui.column([
+                ui.label("Jukebox remote"),
+                ui.label(status),
+                ui.list("songs", SONGS),
+                ui.row([
+                    ui.button("play", "Play"),
+                    ui.button("pause", "Pause"),
+                    ui.button("stop", "Stop"),
+                    ui.button("quit", "Quit"),
+                ]),
+            ]))
+
+        # Presses something on the jukebox, and says how it went.
+        def press(call, args, done):
+            if box == None:
+                status = "There's no jukebox to work yet."
+            elif dev.call(box, call, args):
+                status = done
+            else:
+                status = "That didn't work: " + sys.error()
+
+        def tick():
+            asked = 0
+            while box == None and asked < 3 and len(queue) > 0:
+                host = queue.pop(0)
+                asked += 1
+                info = dev.info(host)
+                if info != None and info["kind"] == "Jukebox":
+                    box = host
+                    status = "Found the jukebox at " + host + ". Pick a song, then Play."
+            if box == None and len(queue) == 0:
+                status = "There's no jukebox on this network."
+            for e in ui.events():
+                if e.id == "quit":
+                    ui.clear()
+                    sys.exit(0)
+                elif e.id == "songs":
+                    song = SONGS[int(e.value)]
+                    press("jukebox_selected", {"song_id": song}, "Picked " + song + ".")
+                elif e.id == "play":
+                    press("jukebox_playing", None, "Playing.")
+                elif e.id == "pause":
+                    press("jukebox_pause", None, "Paused.")
+                elif e.id == "stop":
+                    press("jukebox_stop", None, "Stopped.")
+            show()
+
+        show()
