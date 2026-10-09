@@ -102,7 +102,7 @@
   description: Joins the data cable around it like a switch, gives every machine on its network an address, connects its network to the others in the city, and keeps the directory of hostnames the machines publish.
   components:
   - type: NetworkHub
+    router: true
   - type: GuideHelp
     guides:
     - ComputerNetworks
-    router: true
