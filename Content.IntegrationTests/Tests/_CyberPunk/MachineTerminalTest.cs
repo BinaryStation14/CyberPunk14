@@ -4,12 +4,14 @@ using Content.Server._CyberPunk.Machines;
 using Content.Server._CyberPunk.Wasm;
 using Content.Shared._CyberPunk.Machines;
 using Robust.Shared.GameObjects;
+using Robust.Shared.Input;
 
 namespace Content.IntegrationTests.Tests._CyberPunk;
 
 /// <summary>
 /// A programmable computer's terminal window shows its screen, sends what's typed, follows output from anyone
-/// else at the machine, and passes keys straight to a program in raw mode.
+/// else at the machine, passes keys straight to a program in raw mode, and shows the whole screen again when
+/// it's reopened.
 /// </summary>
 public sealed class MachineTerminalTest : InteractionTest
 {
@@ -63,5 +65,26 @@ public sealed class MachineTerminalTest : InteractionTest
         await RunTicks(15);
         Assert.That(window.Screen.Raw, Is.False);
         Assert.That(window.Input.Visible, Is.True);
+    }
+
+    [Test]
+    public async Task TerminalKeepsScreenWhenReopened()
+    {
+        await SpawnTarget("ComputerProgrammable");
+        ToggleNeedPower();
+        await RunTicks(30);
+
+        // The client opens the terminal itself, as a player clicking on it does.
+        await PressKey(EngineKeyFunctions.Use);
+        await RunTicks(15);
+        await SendBui(MachineTerminalUiKey.Key, new MachineTerminalLineMessage("echo kept output"));
+        await CloseBui(MachineTerminalUiKey.Key);
+        Assert.That(IsUiOpen(MachineTerminalUiKey.Key), Is.False);
+
+        await PressKey(EngineKeyFunctions.Use);
+        await RunTicks(15);
+        var window = GetWindow<MachineTerminalWindow>();
+        Assert.That(window.Screen.Text, Does.Contain(StubOs.Name));
+        Assert.That(window.Screen.Text, Does.Contain("kept output"));
     }
 }

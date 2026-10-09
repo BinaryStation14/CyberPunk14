@@ -58,6 +58,7 @@ public sealed partial class WasmMachineSystem : EntitySystem
 
         Subs.BuiEvents<WasmMachineComponent>(MachineTerminalUiKey.Key, subs =>
         {
+            subs.Event<BoundUIOpenedEvent>(OnTerminalOpened);
             subs.Event<MachineTerminalRefreshMessage>(OnTerminalRefresh);
             subs.Event<MachineTerminalLineMessage>(OnTerminalLine);
             subs.Event<MachineTerminalKeyMessage>(OnTerminalKey);
@@ -229,13 +230,26 @@ public sealed partial class WasmMachineSystem : EntitySystem
             _ui.ServerSendUiMessage(ent.Owner, MachineTerminalUiKey.Key, new MachineTerminalOutputMessage(text));
     }
 
+    // A window the client opened itself asks for the screen before the server knows it's open, so that request
+    // is dropped; the server sends the screen when it opens the terminal instead. A window the server opened
+    // only exists once the client hears it's open, so it asks for the screen itself.
+    private void OnTerminalOpened(Entity<WasmMachineComponent> ent, ref BoundUIOpenedEvent args)
+    {
+        SendScreen(ent, args.Actor);
+    }
+
     private void OnTerminalRefresh(Entity<WasmMachineComponent> ent, ref MachineTerminalRefreshMessage args)
+    {
+        SendScreen(ent, args.Actor);
+    }
+
+    private void SendScreen(Entity<WasmMachineComponent> ent, EntityUid actor)
     {
         CollectOutput(ent);
         _ui.ServerSendUiMessage(ent.Owner,
             MachineTerminalUiKey.Key,
             new MachineTerminalScreenMessage(ent.Comp.Screen, ent.Comp.Raw),
-            args.Actor);
+            actor);
     }
 
     private void OnTerminalLine(Entity<WasmMachineComponent> ent, ref MachineTerminalLineMessage args)
