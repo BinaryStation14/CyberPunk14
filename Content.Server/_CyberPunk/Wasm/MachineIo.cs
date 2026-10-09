@@ -88,6 +88,18 @@ public sealed class MachineIo
     /// <summary>A program asked to restart the machine once the call returns.</summary>
     public bool Reboot;
 
+    /// <summary>The UI text of the program being called, so showing the same UI again costs nothing.</summary>
+    public string UiText = "";
+
+    /// <summary>The UI the program being called set (a null root clears it), and its text.</summary>
+    public (ProgramUiNode? Root, string Text)? UiChange;
+
+    /// <summary>What people did to the front program's UI, for <c>ui_event</c>.</summary>
+    public readonly Queue<(string Id, ProgramUiEventKind Kind, string Value)> UiEvents = new();
+
+    /// <summary>The process <see cref="UiEvents"/> are for: only it can take them.</summary>
+    public uint UiEventsFor;
+
     /// <summary>How many programs are stacked where the process being called runs, it included.</summary>
     public int Depth;
 

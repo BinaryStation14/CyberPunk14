@@ -6,7 +6,8 @@ namespace Content.Client._CyberPunk.Machines;
 
 /// <summary>
 /// Opens a machine's terminal. It asks the server for the whole screen when it opens, and the server sends each
-/// new piece of output after that, so everyone at the machine sees the same thing.
+/// new piece of output after that, and the program's UI whenever it changes, so everyone at the machine sees the
+/// same thing.
 /// </summary>
 [UsedImplicitly]
 public sealed class MachineTerminalBoundUserInterface : BoundUserInterface
@@ -24,6 +25,7 @@ public sealed class MachineTerminalBoundUserInterface : BoundUserInterface
 
         _window = this.CreateWindow<MachineTerminalWindow>();
         _window.Screen.OnKeys += keys => SendMessage(new MachineTerminalKeysMessage(keys));
+        _window.Program.OnEvent += (id, kind, value) => SendMessage(new MachineTerminalUiEventMessage(id, kind, value));
         _window.Screen.GrabKeyboardFocus();
 
         SendMessage(new MachineTerminalRefreshMessage());
@@ -43,6 +45,9 @@ public sealed class MachineTerminalBoundUserInterface : BoundUserInterface
                 break;
             case MachineTerminalOutputMessage output:
                 _window.Screen.AddOutput(output.Text);
+                break;
+            case MachineTerminalUiMessage ui:
+                _window.SetUi(ui.Root);
                 break;
         }
     }

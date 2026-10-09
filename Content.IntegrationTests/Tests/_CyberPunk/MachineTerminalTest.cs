@@ -68,6 +68,47 @@ public sealed class MachineTerminalTest : InteractionTest
     }
 
     [Test]
+    public async Task TerminalShowsAProgramsUi()
+    {
+        await SpawnTarget("ComputerProgrammable");
+        ToggleNeedPower();
+        await RunTicks(30);
+
+        var machines = SEntMan.System<WasmMachineSystem>();
+        var target = SEntMan.GetEntity(Target!.Value);
+        await Server.WaitPost(() =>
+        {
+            machines.WriteFile((target, SEntMan.GetComponent<WasmMachineComponent>(target)),
+                "panel.wire",
+                """
+                ui.show(ui.column([ui.label("Door control"), ui.button("open", "Open")]))
+                def tick():
+                    for e in ui.events():
+                        print("pressed", e.id)
+                        sys.exit()
+                """u8.ToArray());
+        });
+
+        await Interact();
+        var window = GetWindow<MachineTerminalWindow>();
+        Assert.That(window.ShowingProgram, Is.False);
+
+        // The program's UI takes the window's place of the screen.
+        await TypeLine("build panel.wire");
+        await TypeLine("run panel.wasm");
+        await RunTicks(5);
+        Assert.That(window.ShowingProgram, Is.True);
+        Assert.That(window.Program.ChildCount, Is.EqualTo(1));
+
+        // Pressing its button reaches the program, and when the program ends the screen is back.
+        await SendBui(MachineTerminalUiKey.Key, new MachineTerminalUiEventMessage("open", ProgramUiEventKind.Click, ""));
+        await RunTicks(5);
+        Assert.That(window.Screen.Text, Does.Contain("pressed open\n"));
+        Assert.That(window.ShowingProgram, Is.False);
+        Assert.That(window.Program.ChildCount, Is.Zero);
+    }
+
+    [Test]
     public async Task TerminalKeepsScreenWhenReopened()
     {
         await SpawnTarget("ComputerProgrammable");

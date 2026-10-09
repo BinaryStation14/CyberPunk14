@@ -152,6 +152,7 @@ public sealed class Vm : IDisposable
         _io.Kills.Clear();
         _io.Exit = null;
         _io.Reboot = false;
+        _io.UiEvents.Clear();
         _io.Inbox.Clear();
         _io.Outbox.Clear();
         _io.DeviceCommands.Clear();
@@ -172,6 +173,7 @@ public sealed class Vm : IDisposable
         EndAll();
         _io.SetRaw(false);
         _io.Reboot = false;
+        _io.UiEvents.Clear();
         _bootedFromDisk = false;
 
         if (_firmware == null && _io.Disk.Read(BootFile) is { } bytes)
@@ -312,6 +314,76 @@ public sealed class Vm : IDisposable
         var text = _io.Output.ToString();
         _io.Output.Clear();
         return text;
+    }
+
+    #endregion
+
+    #region Program UIs
+
+    /// <summary>
+    /// The UI of the program in front of the terminal, or null if it shows text.
+    /// </summary>
+    public ProgramUiNode? Ui => State == VmState.Running && _procs.Count > 0 ? _procs[^1].Ui : null;
+
+    /// <summary>
+    /// Someone used a widget of the front program's UI. It's checked against the UI (an id it doesn't have, or
+    /// a value the widget can't send, is dropped) and queued for the program's <c>ui_event</c>.
+    /// </summary>
+    /// <returns>Whether it was queued.</returns>
+    public bool UiEvent(string id, ProgramUiEventKind kind, string value)
+    {
+        if (Ui is not { } root || Find(root, id) is not { } widget || !Valid(widget, kind, value))
+            return false;
+
+        var front = _procs[^1].Pid;
+        if (_io.UiEventsFor != front)
+        {
+            _io.UiEvents.Clear();
+            _io.UiEventsFor = front;
+        }
+
+        if (_io.UiEvents.Count >= WasmHost.UiEventLimit)
+            return false;
+
+        _io.UiEvents.Enqueue((id, kind, value));
+        return true;
+    }
+
+    private static ProgramUiNode? Find(ProgramUiNode node, string id)
+    {
+        if (node.Id == id)
+            return node;
+
+        foreach (var child in node.Children)
+        {
+            if (Find(child, id) is { } found)
+                return found;
+        }
+
+        return null;
+    }
+
+    private static bool Valid(ProgramUiNode widget, ProgramUiEventKind kind, string value)
+    {
+        switch (widget.Kind, kind)
+        {
+            case (ProgramUiKind.Button, ProgramUiEventKind.Click):
+                return value == "";
+            case (ProgramUiKind.Input, ProgramUiEventKind.Submit):
+                return value.Length <= ProgramUiParser.MaxText && !value.Contains('\n');
+            case (ProgramUiKind.List, ProgramUiEventKind.Select):
+                return int.TryParse(value, out var index) && index >= 0 && index < widget.Items.Length
+                       && value == index.ToString();
+            case (ProgramUiKind.Canvas, ProgramUiEventKind.Click):
+            {
+                var parts = value.Split(' ');
+                return parts.Length == 2
+                       && int.TryParse(parts[0], out var x) && x >= 0 && x < widget.Width && parts[0] == x.ToString()
+                       && int.TryParse(parts[1], out var y) && y >= 0 && y < widget.Height && parts[1] == y.ToString();
+            }
+            default:
+                return false;
+        }
     }
 
     #endregion
@@ -658,6 +730,8 @@ public sealed class Vm : IDisposable
         _io.Job = job;
         _io.Rng = process.Rng;
         _io.Args = process.Args;
+        _io.UiText = process.UiText;
+        _io.UiChange = null;
 
         string? crash = null;
         var outOfFuel = false;
@@ -675,6 +749,13 @@ public sealed class Vm : IDisposable
         }
 
         process.Rng = _io.Rng;
+        if (_io.UiChange is { } ui)
+        {
+            process.Ui = ui.Root;
+            process.UiText = ui.Text;
+            _io.UiChange = null;
+        }
+
         var used = fuel - process.Store.Fuel;
         var ok = !outOfFuel && crash == null;
         var name = job == 0 ? process.Name : $"job {job}: {process.Name}";
@@ -892,6 +973,11 @@ public sealed class Vm : IDisposable
         public required Func<int>? DoorHook;
 
         public bool Started;
+
+        /// <summary>The UI it shows while it's in front, and the text it came from.</summary>
+        public ProgramUiNode? Ui;
+
+        public string UiText = "";
 
         public void Dispose()
         {

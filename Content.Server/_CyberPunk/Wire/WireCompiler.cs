@@ -347,7 +347,7 @@ public static class WireCompiler
         {
             return module switch
             {
-                "door" or "camera" or "ice" or "deck" => module,
+                "door" or "camera" or "ice" or "deck" or "ui" => module,
                 "body" => "implant",
                 _ => "modules",
             };

@@ -425,6 +425,70 @@ internal sealed class KernelApi
             if (io.Is(DeviceKind.Computer))
                 io.Output.Append(TerminalText.Clear);
         });
+
+        DefineUi();
+    }
+
+    /// <summary>
+    /// Programs at the terminal showing a UI of widgets instead of text. The Vm keeps each program's UI and shows
+    /// the front one's.
+    /// </summary>
+    private void DefineUi()
+    {
+        Def("ui_set", (c, ptr, len, err, errCap) =>
+        {
+            var io = Io(c);
+            if (!io.Is(DeviceKind.Computer) || io.Job != 0)
+                return -1;
+
+            if ((uint) len > ProgramUiParser.MaxBytes)
+            {
+                WriteText(c, err, errCap, $"too long ({ProgramUiParser.MaxBytes / 1024} KiB at most)");
+                return -2;
+            }
+
+            var text = ReadText(c, ptr, len);
+            if (text == io.UiText)
+                return 0;
+
+            try
+            {
+                io.UiChange = (ProgramUiParser.Parse(text), text);
+                return 0;
+            }
+            catch (ProgramUiException e)
+            {
+                WriteText(c, err, errCap, e.Message);
+                return -2;
+            }
+        });
+
+        Def("ui_event", (c, buf, cap) =>
+        {
+            var io = Io(c);
+            if (io.Job != 0 || io.Pid != io.UiEventsFor || !io.UiEvents.TryPeek(out var e))
+                return -1;
+
+            var kind = e.Kind switch
+            {
+                ProgramUiEventKind.Click => "click",
+                ProgramUiEventKind.Submit => "submit",
+                _ => "select",
+            };
+            // An event that doesn't fit stays, for the program to ask again with room for it.
+            var length = WriteText(c, buf, cap, $"{kind} {e.Id} {e.Value}");
+            if (length <= cap)
+                io.UiEvents.Dequeue();
+
+            return length;
+        });
+
+        Def("ui_clear", c =>
+        {
+            var io = Io(c);
+            if (io.Is(DeviceKind.Computer) && io.Job == 0)
+                io.UiChange = (null, "");
+        });
     }
 
     private void DefineTools()
