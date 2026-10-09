@@ -1,0 +1,177 @@
+using System.Text;
+using Content.Shared._CyberPunk.Machines;
+
+namespace Content.Server._CyberPunk.Wasm;
+
+/// <summary>
+/// A packet between machines.
+/// </summary>
+public sealed record Packet(uint From, uint To, ushort Port, byte[] Data);
+
+/// <summary>
+/// The device a machine is wired to, as it stands this tick.
+/// </summary>
+public abstract record MachineDevice;
+
+/// <summary>
+/// A door: whether it's open, whether something stands in it (so it won't close), and whether it's bolted.
+/// </summary>
+public sealed record DoorDevice(bool Open, bool Blocked, bool Bolted) : MachineDevice;
+
+/// <summary>
+/// A camera, and the names of the people it sees.
+/// </summary>
+public sealed record CameraDevice(IReadOnlyList<string> People) : MachineDevice;
+
+/// <summary>
+/// What a program asked its device to do this tick. The world carries it out after the tick.
+/// </summary>
+public enum DeviceCommand : byte
+{
+    OpenDoor,
+    CloseDoor,
+    BoltDoor,
+    UnboltDoor,
+}
+
+/// <summary>
+/// Someone trying a guarded door, as its controller's <c>on_door_request</c> hook sees them.
+/// </summary>
+/// <param name="Name">Their name.</param>
+/// <param name="Holding">What's in their active hand, or empty.</param>
+/// <param name="Cards">The organization tags of the ID cards they carry.</param>
+public sealed record Requester(string Name, string Holding, IReadOnlyList<string> Cards);
+
+/// <summary>
+/// A program a computer is sending to a device's firmware.
+/// </summary>
+public sealed record FirmwareFlash(uint To, string Name, byte[] Bytes);
+
+/// <summary>
+/// Everything about a machine that a program can touch through the kernel. Every store a machine's programs
+/// run in carries the machine's one <see cref="MachineIo"/>, and the VM sets which process is being called
+/// before each call.
+/// </summary>
+public sealed class MachineIo
+{
+    /// <summary>Device commands a machine can give in one tick, every program on it together.</summary>
+    public const int CommandsPerTick = 32;
+
+    public readonly MachineDisk Disk = new();
+
+    /// <summary>The host running this machine's current call.</summary>
+    public WasmHost Host = default!;
+
+    public DeviceKind Kind;
+
+    public readonly StringBuilder Output = new();
+    public int OutputThisTick;
+    public bool Truncated;
+
+    /// <summary>Typed input waiting to be read.</summary>
+    public readonly List<byte> Input = new();
+
+    public ulong ClockMs;
+
+    /// <summary>A program the process being called asked to run when the call returns: its file and arguments.</summary>
+    public (string File, string Args)? Exec;
+
+    public int? Exit;
+
+    /// <summary>How many programs are stacked where the process being called runs, it included.</summary>
+    public int Depth;
+
+    /// <summary>The process being called.</summary>
+    public uint Pid;
+
+    /// <summary>The background job the process being called is in, or 0 for the terminal's programs.</summary>
+    public uint Job;
+
+    /// <summary>Background jobs asked for this tick: their id, file and arguments.</summary>
+    public readonly List<(uint Id, string File, string Args)> Spawns = new();
+
+    /// <summary>Jobs asked to stop this tick.</summary>
+    public readonly List<uint> Kills = new();
+
+    /// <summary>The jobs running, as the process being called sees them: their id and the program in front.</summary>
+    public readonly List<(uint Id, string Name)> Jobs = new();
+
+    public uint NextJob;
+
+    /// <summary>The random number state of the process being called.</summary>
+    public ulong Rng;
+
+    /// <summary>The arguments of the process being called.</summary>
+    public string Args = "";
+
+    public uint? Address;
+
+    /// <summary>Who the machine can reach, or null when it isn't connected.</summary>
+    public IReadOnlySet<uint>? Reachable;
+
+    public IReadOnlyList<uint> Neighbours = Array.Empty<uint>();
+    public readonly Queue<Packet> Inbox = new();
+    public readonly List<Packet> Outbox = new();
+
+    public MachineDevice? Device;
+    public readonly List<DeviceCommand> DeviceCommands = new();
+
+    /// <summary>Whether the terminal is in raw mode.</summary>
+    public bool Raw;
+
+    /// <summary>Keys waiting to be read in raw mode.</summary>
+    public readonly Queue<int> Keys = new();
+
+    /// <summary>Who is trying the door, while <c>on_door_request</c> runs.</summary>
+    public Requester? Request;
+
+    public FirmwareFlash? Flash;
+
+    /// <summary>
+    /// Whether this machine counts as <paramref name="kind"/>, for kernel functions only some machines have.
+    /// Decks and implants are computers, with more.
+    /// </summary>
+    public bool Is(DeviceKind kind)
+    {
+        return Kind == kind || kind == DeviceKind.Computer && Kind is DeviceKind.Deck or DeviceKind.Implant;
+    }
+
+    public void Command(DeviceCommand command)
+    {
+        if (DeviceCommands.Count < CommandsPerTick)
+            DeviceCommands.Add(command);
+    }
+
+    public void SetRaw(bool on)
+    {
+        if (Raw == on)
+            return;
+
+        Raw = on;
+        Keys.Clear();
+        Input.Clear();
+        Output.Append(on ? TerminalText.RawOn : TerminalText.RawOff);
+    }
+
+    /// <summary>
+    /// Writes a program's output, up to <see cref="WasmHost.OutputPerTick"/> bytes a tick; past that it's
+    /// dropped, with a note.
+    /// </summary>
+    public void Write(string text)
+    {
+        var bytes = Encoding.UTF8.GetByteCount(text);
+        if (OutputThisTick + bytes > WasmHost.OutputPerTick)
+        {
+            if (!Truncated)
+            {
+                Truncated = true;
+                Output.Append("\n[output truncated]\n");
+            }
+
+            return;
+        }
+
+        OutputThisTick += bytes;
+        Output.Append(text);
+    }
+}

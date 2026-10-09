@@ -1,0 +1,788 @@
+using System.Linq;
+using Content.Shared._CyberPunk.Machines;
+using Wasmtime;
+using WasmStore = Wasmtime.Store;
+
+namespace Content.Server._CyberPunk.Wasm;
+
+/// <summary>
+/// Whether a machine is running.
+/// </summary>
+public enum VmState : byte
+{
+    Off,
+    Running,
+
+    /// <summary>The OS stopped; it restarts at <see cref="Vm.RebootAtMs"/>.</summary>
+    Halted,
+}
+
+/// <summary>
+/// One machine's virtual machine: its disk, terminal and the stack of WASM programs running on it, the OS at
+/// the bottom and the program it started on top, plus any background jobs. Ported from <c>Vm</c> in
+/// Switchboard's <c>sb_wasm/src/vm.rs</c>.
+/// </summary>
+/// <remarks>
+/// Only the program in front of each stack runs: one call each tick, its <c>start</c> the first time and its
+/// <c>tick</c> after that. A program that starts another (<c>exec</c>) waits under it until it ends. Every
+/// program on a machine shares its one <see cref="MachineIo"/>.
+/// </remarks>
+public sealed class Vm : IDisposable
+{
+    private readonly MachineIo _io = new();
+
+    /// <summary>The terminal's programs, the OS at the bottom.</summary>
+    private readonly List<Process> _procs = new();
+
+    /// <summary>Programs running in the background, each with its own stack.</summary>
+    private readonly List<Job> _jobs = new();
+
+    private uint _nextPid;
+    private bool _bootedBefore;
+
+    /// <summary>What it boots instead of the OS: a device's firmware.</summary>
+    private (string Name, Module Module)? _firmware;
+
+    public VmState State { get; private set; } = VmState.Off;
+
+    /// <summary>When a halted machine reboots, by its clock.</summary>
+    public ulong RebootAtMs { get; private set; }
+
+    public Vm(DeviceKind kind = DeviceKind.Computer)
+    {
+        _io.Kind = kind;
+    }
+
+    /// <summary>
+    /// A device of <paramref name="kind"/> that boots <paramref name="module"/> (firmware) instead of the OS.
+    /// </summary>
+    public static Vm WithFirmware(string name, Module module, DeviceKind kind)
+    {
+        return new Vm(kind) { _firmware = (name, module) };
+    }
+
+    public DeviceKind Kind
+    {
+        get => _io.Kind;
+        set => _io.Kind = value;
+    }
+
+    public MachineDisk Disk => _io.Disk;
+
+    /// <summary>Milliseconds since the machine booted.</summary>
+    public ulong ClockMs => _io.ClockMs;
+
+    /// <summary>Whether the terminal is in raw mode (keys go to the program one by one).</summary>
+    public bool IsRaw => _io.Raw;
+
+    /// <summary>The name of the firmware a device boots, if it has some.</summary>
+    public string? FirmwareName => _firmware?.Name;
+
+    /// <summary>Names of the programs running at the terminal, the OS first.</summary>
+    public IReadOnlyList<string> Processes => _procs.Select(p => p.Name).ToList();
+
+    /// <summary>The background jobs: each one's id and the programs in it.</summary>
+    public IReadOnlyList<(uint Id, IReadOnlyList<string> Programs)> Jobs =>
+        _jobs.Select(j => (j.Id, (IReadOnlyList<string>) j.Procs.Select(p => p.Name).ToList())).ToList();
+
+    /// <summary>
+    /// Whether something is waiting for the machine: typed input, keys or packets.
+    /// </summary>
+    public bool WantsAttention => _io.Input.Count > 0 || _io.Keys.Count > 0 || _io.Inbox.Count > 0;
+
+    /// <summary>
+    /// Whether it has work of its own on: a program in front of the shell, or a background job.
+    /// </summary>
+    public bool Busy => State == VmState.Running && (_procs.Count > 1 || _jobs.Count > 0);
+
+    /// <summary>
+    /// Whether the process with this pid is running, at the terminal or in the background.
+    /// </summary>
+    public bool IsRunning(uint pid)
+    {
+        return State == VmState.Running && _procs.Concat(_jobs.SelectMany(j => j.Procs)).Any(p => p.Pid == pid);
+    }
+
+    #region Power
+
+    /// <summary>
+    /// Powers on and boots the OS (or firmware). Files on the disk are kept.
+    /// </summary>
+    public void PowerOn(WasmHost host)
+    {
+        if (State != VmState.Off)
+            return;
+
+        _io.ClockMs = 0;
+        _io.Input.Clear();
+        if (_bootedBefore)
+            _io.Output.Append("\n[power restored: rebooting]\n");
+
+        _bootedBefore = true;
+        Boot(host);
+    }
+
+    /// <summary>
+    /// Cuts power: everything running stops at once. The disk is kept.
+    /// </summary>
+    public void PowerOff()
+    {
+        if (State == VmState.Off)
+            return;
+
+        EndAll();
+        _io.Input.Clear();
+        _io.Exec = null;
+        _io.Spawns.Clear();
+        _io.Kills.Clear();
+        _io.Exit = null;
+        _io.Inbox.Clear();
+        _io.Outbox.Clear();
+        _io.DeviceCommands.Clear();
+        _io.Flash = null;
+        _io.Raw = false;
+        _io.Keys.Clear();
+        State = VmState.Off;
+        _io.Output.Append("\n[power lost]\n");
+    }
+
+    private void Boot(WasmHost host)
+    {
+        EndAll();
+        _io.SetRaw(false);
+
+        var (name, os) = _firmware ?? ("os", host.Os);
+        try
+        {
+            _procs.Add(Spawn(host, name, os, ""));
+            State = VmState.Running;
+        }
+        catch (WasmLoadException e)
+        {
+            _io.Output.Append($"[boot failed: {e.Message}]\n");
+            HaltMachine();
+        }
+    }
+
+    /// <summary>
+    /// Replaces a device's firmware with <paramref name="module"/> and boots it, keeping it through power
+    /// cuts.
+    /// </summary>
+    public void Flash(WasmHost host, string name, Module module)
+    {
+        _firmware = (name, module);
+        if (State == VmState.Off)
+            return;
+
+        _io.DeviceCommands.Clear();
+        Boot(host);
+    }
+
+    private void HaltMachine()
+    {
+        State = VmState.Halted;
+        RebootAtMs = _io.ClockMs + WasmHost.RebootDelayMs;
+    }
+
+    #endregion
+
+    #region Terminal
+
+    /// <summary>
+    /// Queues a line of typed input for the program in front. Ignored in raw mode, where keys come one by one
+    /// instead.
+    /// </summary>
+    public void TypeLine(string line)
+    {
+        if (State != VmState.Running || _io.Raw)
+            return;
+
+        var bytes = System.Text.Encoding.UTF8.GetBytes(line);
+        if (_io.Input.Count + bytes.Length >= WasmHost.InputLimit)
+            return;
+
+        _io.Input.AddRange(bytes);
+        _io.Input.Add((byte) '\n');
+    }
+
+    /// <summary>
+    /// A key pressed at the terminal, for a program in raw mode. Dropped otherwise, or when too many are
+    /// waiting.
+    /// </summary>
+    public void TypeKey(int key)
+    {
+        if (State == VmState.Running && _io.Raw && _io.Keys.Count < WasmHost.KeyLimit && TerminalKeys.Valid(key))
+            _io.Keys.Enqueue(key);
+    }
+
+    /// <summary>
+    /// Shows a message from the machine itself on its terminal.
+    /// </summary>
+    public void Announce(string text)
+    {
+        _io.Output.Append(text);
+    }
+
+    /// <summary>
+    /// The terminal output since the last call.
+    /// </summary>
+    public string TakeOutput()
+    {
+        var text = _io.Output.ToString();
+        _io.Output.Clear();
+        return text;
+    }
+
+    #endregion
+
+    #region Disk
+
+    /// <summary>
+    /// Stores an uploaded program on the disk, after checking it's one this machine can run.
+    /// </summary>
+    /// <returns>Why it wasn't stored, or null.</returns>
+    public string? Upload(WasmHost host, string name, byte[] wasm)
+    {
+        if (!MachineDisk.ValidFileName(name))
+            return $"\"{name}\" isn't a valid file name";
+
+        try
+        {
+            host.Load(wasm);
+        }
+        catch (WasmLoadException e)
+        {
+            return e.Message;
+        }
+
+        return _io.Disk.Write(name, wasm) switch
+        {
+            DiskError.None => null,
+            DiskError.Full => "the disk is full",
+            _ => $"\"{name}\" isn't a valid file name",
+        };
+    }
+
+    /// <summary>
+    /// Puts a file on the disk directly, as a map or the city generator does before the machine first runs.
+    /// </summary>
+    public DiskError SeedFile(string name, byte[] data)
+    {
+        return _io.Disk.Write(name, data);
+    }
+
+    #endregion
+
+    #region Network and devices
+
+    /// <summary>
+    /// Sets what the machine sees of the network this tick: its address, who it can reach (null when it
+    /// isn't connected) and its neighbours.
+    /// </summary>
+    public void SetNetwork(uint? address, IReadOnlySet<uint>? reachable, IReadOnlyList<uint> neighbours)
+    {
+        _io.Address = address;
+        _io.Reachable = reachable;
+        _io.Neighbours = neighbours;
+    }
+
+    /// <summary>
+    /// Hands the machine a packet. False (and dropped) if it isn't running or its inbox is full.
+    /// </summary>
+    public bool Deliver(Packet packet)
+    {
+        if (State != VmState.Running || _io.Inbox.Count >= WasmHost.InboxLimit)
+            return false;
+
+        _io.Inbox.Enqueue(packet);
+        return true;
+    }
+
+    /// <summary>
+    /// Packets sent since the last call.
+    /// </summary>
+    public List<Packet> TakeOutbox()
+    {
+        var packets = new List<Packet>(_io.Outbox);
+        _io.Outbox.Clear();
+        return packets;
+    }
+
+    public int InboxCount => _io.Inbox.Count;
+
+    /// <summary>
+    /// Sets the device the machine is wired to, as it stands this tick.
+    /// </summary>
+    public void SetDevice(MachineDevice? device)
+    {
+        _io.Device = device;
+    }
+
+    /// <summary>
+    /// What the programs asked the device to do since the last call, in order.
+    /// </summary>
+    public List<DeviceCommand> TakeDeviceCommands()
+    {
+        var commands = new List<DeviceCommand>(_io.DeviceCommands);
+        _io.DeviceCommands.Clear();
+        return commands;
+    }
+
+    /// <summary>
+    /// A program asked to flash a device since the last call.
+    /// </summary>
+    public FirmwareFlash? TakeFlash()
+    {
+        var flash = _io.Flash;
+        _io.Flash = null;
+        return flash;
+    }
+
+    /// <summary>
+    /// Whether the program in front vets people opening the door by hand.
+    /// </summary>
+    public bool GuardsDoor => State == VmState.Running && _procs.Count > 0 && _procs[^1] is { Started: true, DoorHook: not null };
+
+    /// <summary>
+    /// Asks the program in front whether <paramref name="who"/> may open the door, with at most
+    /// <paramref name="fuel"/>. Null if it has no hook; a hook that fails keeps the door shut, and the program
+    /// is ended as if it had crashed.
+    /// </summary>
+    public bool? DoorRequest(WasmHost host, Requester who, ulong fuel)
+    {
+        if (!GuardsDoor)
+            return null;
+
+        var process = _procs[^1];
+        process.Store.Fuel = fuel;
+        _io.Host = host;
+        _io.Request = who;
+        try
+        {
+            return process.DoorHook!() != 0;
+        }
+        catch (WasmtimeException e)
+        {
+            var why = e is TrapException { Type: TrapCode.OutOfFuel }
+                ? "it used up its time budget"
+                : WasmHost.FirstLine(e.Message);
+            _io.Output.Append($"\n[{process.Name} crashed in on_door_request: {why}]\n");
+            EndFront(clean: false);
+            return false;
+        }
+        finally
+        {
+            _io.Request = null;
+        }
+    }
+
+    #endregion
+
+    #region Programs
+
+    /// <summary>
+    /// Starts a program over whatever is running, as <c>run</c> would, if the machine is at its shell. It runs
+    /// from the next tick.
+    /// </summary>
+    /// <returns>Why it couldn't, or null.</returns>
+    public string? Launch(WasmHost host, string file, string args)
+    {
+        if (State != VmState.Running)
+            return "the machine isn't running";
+
+        if (_procs.Count != 1)
+            return "the machine is busy running something else";
+
+        if (args.Length > WasmHost.MaxArgs)
+            return "its arguments are too long";
+
+        try
+        {
+            _procs.Add(StartProgram(host, file, args));
+            return null;
+        }
+        catch (WasmLoadException e)
+        {
+            return e.Message;
+        }
+    }
+
+    /// <summary>
+    /// Ends the process with this pid, and any it started, saying why. The ones below it carry on; a
+    /// background job left with nothing ends.
+    /// </summary>
+    public void Halt(uint pid, string why)
+    {
+        if (State != VmState.Running)
+            return;
+
+        var at = _procs.FindIndex(p => p.Pid == pid);
+        if (at >= 0)
+        {
+            var name = _procs[at].Name;
+            Truncate(_procs, at);
+            _io.SetRaw(false);
+            _io.Output.Append($"\n[{name} halted: {why}]\n");
+            if (_procs.Count == 0)
+                HaltMachine();
+
+            return;
+        }
+
+        foreach (var job in _jobs)
+        {
+            at = job.Procs.FindIndex(p => p.Pid == pid);
+            if (at < 0)
+                continue;
+
+            var name = job.Procs[at].Name;
+            Truncate(job.Procs, at);
+            _io.Output.Append($"\n[job {job.Id}: {name} halted: {why}]\n");
+        }
+
+        _jobs.RemoveAll(j => j.Procs.Count == 0);
+    }
+
+    /// <summary>
+    /// Runs one tick: the program in front of the terminal gets one call (its <c>start</c> if it hasn't
+    /// started yet, else its <c>tick</c>) with at most <paramref name="fuel"/>, then each background job's
+    /// with what's left.
+    /// </summary>
+    /// <param name="host">The host to run on.</param>
+    /// <param name="dtMs">How far the machine's clock moves on: one tick, or more if it slept.</param>
+    /// <param name="fuel">The most fuel this tick may burn.</param>
+    /// <returns>The fuel used.</returns>
+    public ulong Tick(WasmHost host, ulong dtMs, ulong fuel)
+    {
+        _io.Host = host;
+        _io.ClockMs += dtMs;
+        _io.OutputThisTick = 0;
+        _io.Truncated = false;
+
+        switch (State)
+        {
+            case VmState.Off:
+                return 0;
+            case VmState.Halted:
+                if (_io.ClockMs >= RebootAtMs)
+                {
+                    _io.Output.Append("[rebooting]\n");
+                    Boot(host);
+                }
+
+                return 0;
+        }
+
+        // The terminal's programs, then each background job's, sharing the fuel.
+        _io.Jobs.Clear();
+        foreach (var job in _jobs)
+        {
+            if (job.Procs.Count > 0)
+                _io.Jobs.Add((job.Id, job.Procs[^1].Name));
+        }
+
+        var (used, ended, clean) = Step(host, _procs, 0, fuel);
+        if (ended)
+        {
+            _io.SetRaw(false);
+            if (_procs.Count == 0)
+            {
+                if (clean)
+                    _io.Output.Append("[system halted]\n");
+
+                HaltMachine();
+                return used;
+            }
+        }
+
+        foreach (var job in _jobs)
+        {
+            if (used >= fuel)
+                break;
+
+            used += Step(host, job.Procs, job.Id, fuel - used).Used;
+        }
+
+        _jobs.RemoveAll(j => j.Procs.Count == 0);
+
+        StartAndKillJobs(host);
+        return used;
+    }
+
+    /// <summary>
+    /// One call into the front program of a stack (its <c>start</c> if it hasn't started yet, else its
+    /// <c>tick</c>), with at most <paramref name="fuel"/>. A program it asked to run goes on top.
+    /// </summary>
+    /// <returns>The fuel used, whether the program ended (it's popped), and whether cleanly.</returns>
+    private (ulong Used, bool Ended, bool Clean) Step(WasmHost host, List<Process> stack, uint job, ulong fuel)
+    {
+        if (stack.Count == 0)
+            return (0, false, false);
+
+        var process = stack[^1];
+        Action call;
+        if (process.Started)
+        {
+            if (process.TickHook == null)
+                return (0, false, false);
+
+            call = process.TickHook;
+        }
+        else
+        {
+            process.Started = true;
+            call = process.Start;
+        }
+
+        process.Store.Fuel = fuel;
+        _io.Depth = stack.Count;
+        _io.Pid = process.Pid;
+        _io.Job = job;
+        _io.Rng = process.Rng;
+        _io.Args = process.Args;
+
+        string? crash = null;
+        var outOfFuel = false;
+        try
+        {
+            call();
+        }
+        catch (TrapException e) when (e.Type == TrapCode.OutOfFuel)
+        {
+            outOfFuel = true;
+        }
+        catch (WasmtimeException e)
+        {
+            crash = WasmHost.FirstLine(e.Message);
+        }
+
+        process.Rng = _io.Rng;
+        var used = fuel - process.Store.Fuel;
+        var ok = !outOfFuel && crash == null;
+        var name = job == 0 ? process.Name : $"job {job}: {process.Name}";
+
+        bool finished;
+        if (outOfFuel)
+        {
+            _io.Output.Append($"\n[{name} killed: it used up its time budget]\n");
+            finished = true;
+        }
+        else if (crash != null)
+        {
+            _io.Output.Append($"\n[{name} crashed: {crash}]\n");
+            finished = true;
+        }
+        else
+        {
+            finished = _io.Exit != null || process.TickHook == null;
+        }
+
+        var exit = _io.Exit;
+        var exec = _io.Exec;
+        _io.Exit = null;
+        _io.Exec = null;
+
+        if (finished)
+        {
+            stack.RemoveAt(stack.Count - 1);
+            process.Dispose();
+            return (used, true, exit != null || ok);
+        }
+
+        // The program asked to run another.
+        if (exec is { } asked)
+        {
+            var (file, args) = asked;
+            try
+            {
+                stack.Add(StartProgram(host, file, args));
+            }
+            catch (WasmLoadException e)
+            {
+                _io.Output.Append($"[could not run {file}: {e.Message}]\n");
+            }
+        }
+
+        return (used, false, false);
+    }
+
+    /// <summary>
+    /// Starts the background jobs programs asked for this tick, and stops the ones they asked to kill.
+    /// </summary>
+    private void StartAndKillJobs(WasmHost host)
+    {
+        foreach (var id in _io.Kills)
+        {
+            var at = _jobs.FindIndex(j => j.Id == id);
+            if (at < 0)
+                continue;
+
+            var job = _jobs[at];
+            _jobs.RemoveAt(at);
+            var name = job.Procs.Count > 0 ? job.Procs[^1].Name : "";
+            Truncate(job.Procs, 0);
+            _io.Output.Append($"[job {id}: {name} killed]\n");
+        }
+
+        _io.Kills.Clear();
+
+        foreach (var (id, file, args) in _io.Spawns)
+        {
+            if (_jobs.Count >= WasmHost.MaxJobs)
+            {
+                _io.Output.Append($"[could not run {file}: too many jobs]\n");
+                continue;
+            }
+
+            try
+            {
+                _jobs.Add(new Job(id, [StartProgram(host, file, args)]));
+            }
+            catch (WasmLoadException e)
+            {
+                _io.Output.Append($"[could not run {file}: {e.Message}]\n");
+            }
+        }
+
+        _io.Spawns.Clear();
+    }
+
+    /// <summary>
+    /// Ends the program in front, and its raw mode with it. If it was the OS, the machine halts and reboots
+    /// soon.
+    /// </summary>
+    private void EndFront(bool clean)
+    {
+        Truncate(_procs, _procs.Count - 1);
+        _io.SetRaw(false);
+        if (_procs.Count > 0)
+            return;
+
+        if (clean)
+            _io.Output.Append("[system halted]\n");
+
+        HaltMachine();
+    }
+
+    private Process StartProgram(WasmHost host, string file, string args)
+    {
+        Module module;
+        if (_io.Disk.Read(file) is { } bytes)
+            module = host.Load(bytes);
+        else
+            module = host.SystemProgram(file) ?? throw new WasmLoadException("no such file");
+
+        return Spawn(host, file, module, args);
+    }
+
+    /// <summary>
+    /// Instantiates a program in a store of its own. Its start-up code (a WASM start section) runs here, with
+    /// a call's worth of fuel.
+    /// </summary>
+    private Process Spawn(WasmHost host, string name, Module module, string args)
+    {
+        var store = host.NewStore(_io);
+        try
+        {
+            store.Fuel = WasmHost.FuelPerCall;
+            _io.Host = host;
+            _io.Args = args;
+
+            Instance instance;
+            try
+            {
+                instance = host.Instantiate(store, module);
+            }
+            catch (WasmtimeException e)
+            {
+                throw new WasmLoadException(WasmHost.FirstLine(e.Message));
+            }
+
+            if (instance.GetMemory("memory") == null)
+                throw new WasmLoadException("it exports no memory");
+
+            var start = instance.GetAction("start")
+                        ?? throw new WasmLoadException("its `start` entry point has the wrong signature");
+
+            _nextPid++;
+            return new Process
+            {
+                Pid = _nextPid,
+                Rng = unchecked(_nextPid * 0x9E37_79B9_7F4A_7C15UL) | 1,
+                Name = name,
+                Args = args,
+                Store = store,
+                Start = start,
+                TickHook = instance.GetAction("tick"),
+                DoorHook = instance.GetFunction<int>("on_door_request"),
+            };
+        }
+        catch
+        {
+            store.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Ends every process in a stack from <paramref name="from"/> up.
+    /// </summary>
+    private static void Truncate(List<Process> stack, int from)
+    {
+        for (var i = stack.Count - 1; i >= from; i--)
+        {
+            stack[i].Dispose();
+            stack.RemoveAt(i);
+        }
+    }
+
+    private void EndAll()
+    {
+        Truncate(_procs, 0);
+        foreach (var job in _jobs)
+        {
+            Truncate(job.Procs, 0);
+        }
+
+        _jobs.Clear();
+    }
+
+    #endregion
+
+    public void Dispose()
+    {
+        EndAll();
+    }
+
+    /// <summary>
+    /// A running program.
+    /// </summary>
+    private sealed class Process : IDisposable
+    {
+        public required uint Pid;
+
+        /// <summary>Its random number state, seeded from its pid.</summary>
+        public required ulong Rng;
+
+        public required string Name;
+        public required string Args;
+        public required WasmStore Store;
+        public required Action Start;
+        public required Action? TickHook;
+
+        /// <summary>Its <c>on_door_request</c> hook, if it has one.</summary>
+        public required Func<int>? DoorHook;
+
+        public bool Started;
+
+        public void Dispose()
+        {
+            Store.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// A background job: programs started with <c>run FILE &amp;</c>, with no terminal of their own.
+    /// </summary>
+    private sealed record Job(uint Id, List<Process> Procs);
+}

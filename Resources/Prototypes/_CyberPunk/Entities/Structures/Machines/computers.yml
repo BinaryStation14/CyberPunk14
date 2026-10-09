@@ -1,0 +1,12 @@
+- type: entity
+  parent: BaseComputer
+  id: ComputerProgrammable
+  name: programmable computer
+  description: A general-purpose computer. It runs WebAssembly programs, and boots a small shell when it has power.
+  components:
+  - type: WasmMachine
+    files:
+      readme.txt: |
+        This computer runs WebAssembly programs.
+        Type `help` for the shell's commands, and `man` for the manual.
+      hello.wat: (module (import "sb_v5" "term_write" (func $write (param i32 i32))) (memory (export "memory") 1) (data (i32.const 0) "Hello from a program!\n") (func (export "start") (call $write (i32.const 0) (i32.const 22))))

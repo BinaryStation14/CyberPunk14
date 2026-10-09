@@ -2,16 +2,21 @@ using System.Diagnostics;
 using Content.Server.Administration;
 using Content.Shared.Administration;
 using Robust.Shared.Console;
+using Wasmtime;
 
 namespace Content.Server._CyberPunk.Wasm;
 
 /// <summary>
-/// Runs one of the <see cref="WasmSamples"/> on the server's WASM host and reports what happened.
+/// Runs one of the <see cref="WasmSamples"/> as the firmware of a throwaway machine on the server's WASM
+/// host, and reports what happened.
 /// </summary>
 [AdminCommand(AdminFlags.Debug)]
 public sealed partial class WasmTestCommand : LocalizedEntityCommands
 {
     [Dependency] private WasmHostSystem _wasm = default!;
+
+    /// <summary>Ticks the machine gets to finish in.</summary>
+    private const int MaxTicks = 10;
 
     private static readonly Dictionary<string, string> Samples = new()
     {
@@ -32,30 +37,39 @@ public sealed partial class WasmTestCommand : LocalizedEntityCommands
             return;
         }
 
-        var watch = Stopwatch.StartNew();
-
-        WasmRunResult result;
+        var host = _wasm.Host;
+        Module module;
         try
         {
-            using var module = _wasm.Host.CompileText(args[0], wat);
-            result = _wasm.Host.RunStart(module);
+            module = host.Load(Module.ConvertText(wat));
         }
-        catch (Exception e)
+        catch (Exception e) when (e is WasmtimeException or WasmLoadException)
         {
             shell.WriteError(Loc.GetString("cmd-wasmtest-failed", ("error", e.Message)));
             return;
         }
 
-        if (result.Output.Length > 0)
-            shell.WriteLine(result.Output.TrimEnd('\n'));
+        var watch = Stopwatch.StartNew();
+        using var vm = Vm.WithFirmware(args[0], module, DeviceKind.Computer);
+        vm.PowerOn(host);
+
+        ulong fuel = 0;
+        var ticks = 0;
+        while (ticks < MaxTicks && vm.State == VmState.Running)
+        {
+            fuel += vm.Tick(host, 33, WasmHost.FuelPerCall);
+            ticks++;
+        }
+
+        var output = vm.TakeOutput().Trim('\n');
+        if (output.Length > 0)
+            shell.WriteLine(output);
 
         shell.WriteLine(Loc.GetString("cmd-wasmtest-result",
-            ("outcome", result.Outcome.ToString()),
-            ("fuel", result.FuelUsed),
+            ("state", vm.State.ToString()),
+            ("ticks", ticks),
+            ("fuel", fuel),
             ("ms", watch.Elapsed.TotalMilliseconds.ToString("0.0"))));
-
-        if (result.Error != null)
-            shell.WriteLine(result.Error);
     }
 
     public override CompletionResult GetCompletion(IConsoleShell shell, string[] args)

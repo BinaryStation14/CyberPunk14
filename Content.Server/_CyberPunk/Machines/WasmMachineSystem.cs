@@ -1,0 +1,216 @@
+using System.Diagnostics;
+using System.Text;
+using Content.Server._CyberPunk.Wasm;
+using Content.Server.Power.EntitySystems;
+using Content.Shared._CyberPunk.Machines;
+using Content.Shared.Power;
+
+namespace Content.Server._CyberPunk.Machines;
+
+/// <summary>
+/// Runs a <see cref="Vm"/> for every <see cref="WasmMachineComponent"/>: boots it when it gets power, stops it
+/// when it loses power, and runs it 30 times a second. Ported from the scheduling in Switchboard's
+/// <c>sb_wasm/src/lib.rs</c>.
+/// </summary>
+/// <remarks>
+/// Each machine gets one call within <see cref="WasmHost.FuelPerCall"/> each time it runs, and all machines
+/// together share <see cref="FuelPerTick"/> and <see cref="TimePerTick"/> of real time. Machines over the
+/// budget wait for the next tick, first in line, so no number of busy computers can slow the server down. A
+/// machine that waited is told how much time passed, so its clock is always right.
+/// Machines aren't networked yet and have no devices, so what their programs send and what they tell
+/// devices to do is dropped.
+/// </remarks>
+public sealed partial class WasmMachineSystem : EntitySystem
+{
+    [Dependency] private WasmHostSystem _wasm = default!;
+    [Dependency] private PowerReceiverSystem _power = default!;
+
+    /// <summary>Machine ticks a second, as in Switchboard: a program's <c>tick</c> hook runs this often.</summary>
+    public const int TickRate = 30;
+
+    /// <summary>How far a machine's clock moves in one tick.</summary>
+    public const ulong TickMs = 1000 / TickRate;
+
+    /// <summary>Fuel all machines together may burn in one tick.</summary>
+    public const ulong FuelPerTick = 12 * WasmHost.FuelPerCall;
+
+    /// <summary>Real time all machines together may take in one tick: a fifth of a tick.</summary>
+    public static readonly TimeSpan TimePerTick = TimeSpan.FromMilliseconds(6);
+
+    /// <summary>Machine ticks run in one server update at most, so a slow update doesn't snowball.</summary>
+    private const int MaxTicksPerUpdate = 2;
+
+    private const float TickSeconds = 1f / TickRate;
+
+    private float _accumulator;
+    private ulong _tick;
+    private readonly List<Entity<WasmMachineComponent>> _due = new();
+    private readonly Stopwatch _watch = new();
+
+    public override void Initialize()
+    {
+        base.Initialize();
+
+        SubscribeLocalEvent<WasmMachineComponent, MapInitEvent>(OnMapInit);
+        SubscribeLocalEvent<WasmMachineComponent, ComponentShutdown>(OnShutdown);
+        SubscribeLocalEvent<WasmMachineComponent, PowerChangedEvent>(OnPowerChanged);
+    }
+
+    public override void Shutdown()
+    {
+        base.Shutdown();
+
+        var query = EntityQueryEnumerator<WasmMachineComponent>();
+        while (query.MoveNext(out var machine))
+        {
+            machine.Vm?.Dispose();
+            machine.Vm = null;
+        }
+    }
+
+    private void OnMapInit(Entity<WasmMachineComponent> ent, ref MapInitEvent args)
+    {
+        var vm = new Vm(ent.Comp.Kind);
+        foreach (var (name, text) in ent.Comp.Files)
+        {
+            var error = vm.SeedFile(name, Encoding.UTF8.GetBytes(text));
+            if (error != DiskError.None)
+                Log.Error($"Couldn't put {name} on the disk of {ToPrettyString(ent)}: {error}");
+        }
+
+        ent.Comp.Vm = vm;
+        if (_power.IsPowered(ent))
+            PowerOn(ent);
+    }
+
+    private void OnShutdown(Entity<WasmMachineComponent> ent, ref ComponentShutdown args)
+    {
+        ent.Comp.Vm?.Dispose();
+        ent.Comp.Vm = null;
+    }
+
+    private void OnPowerChanged(Entity<WasmMachineComponent> ent, ref PowerChangedEvent args)
+    {
+        if (ent.Comp.Vm is not { } vm)
+            return;
+
+        if (args.Powered)
+        {
+            PowerOn(ent);
+        }
+        else
+        {
+            vm.PowerOff();
+            CollectOutput(ent.Comp);
+        }
+    }
+
+    private void PowerOn(Entity<WasmMachineComponent> ent)
+    {
+        ent.Comp.Vm!.PowerOn(_wasm.Host);
+        ent.Comp.LastRun = _tick;
+        CollectOutput(ent.Comp);
+    }
+
+    /// <summary>
+    /// Types a line at a machine's terminal, for the program in front to read.
+    /// </summary>
+    public void TypeLine(Entity<WasmMachineComponent> ent, string line)
+    {
+        if (line.Length > TerminalText.MaxLine)
+            line = line[..TerminalText.MaxLine];
+
+        ent.Comp.Vm?.TypeLine(line);
+    }
+
+    /// <summary>
+    /// Presses a key at a machine's terminal, for a program in raw mode.
+    /// </summary>
+    public void TypeKey(Entity<WasmMachineComponent> ent, int key)
+    {
+        ent.Comp.Vm?.TypeKey(key);
+    }
+
+    /// <summary>
+    /// Puts a file on a machine's disk.
+    /// </summary>
+    public DiskError WriteFile(Entity<WasmMachineComponent> ent, string name, byte[] data)
+    {
+        return ent.Comp.Vm?.SeedFile(name, data) ?? DiskError.Full;
+    }
+
+    public override void Update(float frameTime)
+    {
+        base.Update(frameTime);
+
+        _accumulator += frameTime;
+        for (var i = 0; i < MaxTicksPerUpdate && _accumulator >= TickSeconds; i++)
+        {
+            _accumulator -= TickSeconds;
+            RunMachines();
+        }
+
+        _accumulator = Math.Min(_accumulator, TickSeconds);
+    }
+
+    /// <summary>
+    /// One machine tick: one call for each running machine, those that have waited longest first, within the
+    /// fuel and time budgets.
+    /// </summary>
+    private void RunMachines()
+    {
+        _tick++;
+        _due.Clear();
+
+        var query = EntityQueryEnumerator<WasmMachineComponent>();
+        while (query.MoveNext(out var uid, out var machine))
+        {
+            if (machine.Vm == null)
+                continue;
+
+            if (machine.Vm.State == VmState.Off)
+                CollectOutput(machine);
+            else
+                _due.Add((uid, machine));
+        }
+
+        if (_due.Count == 0)
+            return;
+
+        _due.Sort((a, b) => a.Comp.LastRun != b.Comp.LastRun
+            ? a.Comp.LastRun.CompareTo(b.Comp.LastRun)
+            : a.Owner.CompareTo(b.Owner));
+
+        var host = _wasm.Host;
+        var budget = FuelPerTick;
+        _watch.Restart();
+        foreach (var (_, machine) in _due)
+        {
+            if (budget < WasmHost.FuelPerCall || _watch.Elapsed >= TimePerTick)
+                break;
+
+            var vm = machine.Vm!;
+
+            // However long it waited, its clock moves on by that much.
+            var waited = Math.Max(1, _tick - machine.LastRun);
+            machine.LastRun = _tick;
+            budget -= Math.Min(budget, vm.Tick(host, waited * TickMs, WasmHost.FuelPerCall));
+
+            // Nothing is networked or wired to a device yet.
+            vm.TakeOutbox();
+            vm.TakeDeviceCommands();
+            vm.TakeFlash();
+
+            CollectOutput(machine);
+        }
+    }
+
+    private static void CollectOutput(WasmMachineComponent machine)
+    {
+        var text = machine.Vm?.TakeOutput();
+        if (string.IsNullOrEmpty(text))
+            return;
+
+        machine.Screen = TerminalText.Apply(machine.Screen, ref machine.Raw, text);
+    }
+}

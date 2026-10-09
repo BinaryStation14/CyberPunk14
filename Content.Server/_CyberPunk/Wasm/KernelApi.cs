@@ -1,0 +1,695 @@
+using System.Linq;
+using System.Text;
+using Content.Shared._CyberPunk.Machines;
+using Wasmtime;
+
+namespace Content.Server._CyberPunk.Wasm;
+
+/// <summary>
+/// The kernel functions, linked for programs to import. Ported from the host API in Switchboard's
+/// <c>sb_wasm/src/vm.rs</c>.
+/// </summary>
+/// <remarks>
+/// Every function goes in the import module of the kernel version it arrived in (from
+/// <see cref="Kernel.Functions"/>) and in every later one, so programs built against an older kernel keep
+/// working. A function that isn't in that table can't be linked.
+///
+/// Programs are untrusted. Every pointer and length a program passes is checked, and a bad one traps the
+/// program, never the host. Functions take effect on the machine's <see cref="MachineIo"/>; anything that
+/// touches the world (sending packets, moving doors, flashing a device) is queued there, for the world to
+/// carry out after the machine's tick.
+///
+/// ICE, decks and the body (the <c>ice_</c>, <c>deck_</c> and <c>body_</c> functions) arrive with cyberspace
+/// and cyberware. Until then they're linked, so programs that use them still load, and return -1.
+/// </remarks>
+internal sealed class KernelApi
+{
+    private readonly Linker _linker;
+    private readonly HashSet<string> _linked = new();
+
+    private KernelApi(Linker linker)
+    {
+        _linker = linker;
+    }
+
+    /// <summary>
+    /// Links every kernel function into <paramref name="linker"/>, and returns their names.
+    /// </summary>
+    public static IReadOnlySet<string> Define(Linker linker)
+    {
+        var api = new KernelApi(linker);
+        api.DefineSystem();
+        api.DefineDisk();
+        api.DefineNetwork();
+        api.DefineTerminal();
+        api.DefineTools();
+        api.DefineDevices();
+        api.DefineJobs();
+        api.DefineLater();
+        return api._linked;
+    }
+
+    #region Linking
+
+    /// <summary>
+    /// The import modules a function goes in: its own version's and every later one's.
+    /// </summary>
+    private IEnumerable<string> ModulesFor(string name)
+    {
+        var function = Kernel.Find(name) ?? throw new InvalidOperationException(
+            $"Kernel function {name} isn't in Kernel.Functions; document it there before linking it.");
+
+        if (!_linked.Add(name))
+            throw new InvalidOperationException($"Kernel function {name} is linked twice.");
+
+        for (var version = function.Since; version <= Kernel.ApiVersion; version++)
+        {
+            yield return Kernel.Module(version);
+        }
+    }
+
+    private void Def(string name, CallerAction fn)
+    {
+        foreach (var m in ModulesFor(name)) _linker.DefineFunction(m, name, fn);
+    }
+
+    private void Def(string name, CallerAction<int> fn)
+    {
+        foreach (var m in ModulesFor(name)) _linker.DefineFunction(m, name, fn);
+    }
+
+    private void Def(string name, CallerAction<int, int> fn)
+    {
+        foreach (var m in ModulesFor(name)) _linker.DefineFunction(m, name, fn);
+    }
+
+    private void Def(string name, CallerFunc<int> fn)
+    {
+        foreach (var m in ModulesFor(name)) _linker.DefineFunction(m, name, fn);
+    }
+
+    private void Def(string name, CallerFunc<long> fn)
+    {
+        foreach (var m in ModulesFor(name)) _linker.DefineFunction(m, name, fn);
+    }
+
+    private void Def(string name, CallerFunc<int, int> fn)
+    {
+        foreach (var m in ModulesFor(name)) _linker.DefineFunction(m, name, fn);
+    }
+
+    private void Def(string name, CallerFunc<int, int, int> fn)
+    {
+        foreach (var m in ModulesFor(name)) _linker.DefineFunction(m, name, fn);
+    }
+
+    private void Def(string name, CallerFunc<int, int, int, int> fn)
+    {
+        foreach (var m in ModulesFor(name)) _linker.DefineFunction(m, name, fn);
+    }
+
+    private void Def(string name, CallerFunc<int, int, int, int, int> fn)
+    {
+        foreach (var m in ModulesFor(name)) _linker.DefineFunction(m, name, fn);
+    }
+
+    private void Def(string name, CallerFunc<int, int, int, int, int, int, int> fn)
+    {
+        foreach (var m in ModulesFor(name)) _linker.DefineFunction(m, name, fn);
+    }
+
+    #endregion
+
+    #region Guest memory
+
+    private static MachineIo Io(Caller caller)
+    {
+        return (MachineIo) caller.GetData()!;
+    }
+
+    private static Memory MemoryOf(Caller caller)
+    {
+        return caller.GetMemory("memory") ?? throw new TrapException("the program exports no memory");
+    }
+
+    /// <summary>
+    /// Copies bytes out of the program's memory, trapping it on a pointer or length outside its memory.
+    /// </summary>
+    private static byte[] ReadBytes(Caller caller, int ptr, int len)
+    {
+        var memory = MemoryOf(caller);
+        var (start, length) = ((uint) ptr, (uint) len);
+        if ((ulong) start + length > (ulong) memory.GetLength())
+            throw new TrapException("pointer out of bounds");
+
+        return memory.GetSpan(start, (int) length).ToArray();
+    }
+
+    /// <summary>
+    /// Copies up to <paramref name="cap"/> bytes of <paramref name="bytes"/> into the program's memory,
+    /// trapping it on a pointer outside its memory.
+    /// </summary>
+    private static void WriteBytes(Caller caller, int ptr, int cap, ReadOnlySpan<byte> bytes)
+    {
+        var memory = MemoryOf(caller);
+        var start = (uint) ptr;
+        var count = (int) Math.Min((uint) bytes.Length, (uint) cap);
+        if ((ulong) start + (ulong) count > (ulong) memory.GetLength())
+            throw new TrapException("pointer out of bounds");
+
+        bytes[..count].CopyTo(memory.GetSpan(start, count));
+    }
+
+    /// <summary>
+    /// Writes text into the program's memory and returns its full length in bytes, which may be more than
+    /// fit.
+    /// </summary>
+    private static int WriteText(Caller caller, int buf, int cap, string text)
+    {
+        var bytes = Encoding.UTF8.GetBytes(text);
+        WriteBytes(caller, buf, cap, bytes);
+        return bytes.Length;
+    }
+
+    private static string ReadText(Caller caller, int ptr, int len)
+    {
+        return Encoding.UTF8.GetString(ReadBytes(caller, ptr, len));
+    }
+
+    /// <summary>
+    /// Reads a file or topic name: empty if it's longer than any name can be.
+    /// </summary>
+    private static string ReadName(Caller caller, int ptr, int len)
+    {
+        return (uint) len > 64 ? "" : ReadText(caller, ptr, len);
+    }
+
+    private static bool IsProgram(byte[]? data)
+    {
+        return data != null && data.AsSpan().StartsWith("\0asm"u8);
+    }
+
+    #endregion
+
+    private void DefineSystem()
+    {
+        Def("api_version", _ => Kernel.ApiVersion);
+        Def("device_type", c => Kernel.Code(Io(c).Kind));
+        Def("clock_ms", c => (long) Io(c).ClockMs);
+
+        // A program only runs while its machine has power.
+        Def("power", _ => 1);
+
+        Def("exit", (c, code) => Io(c).Exit = code);
+        Def("exec", (c, name, len) => RequestExec(Io(c), ReadName(c, name, len), ""));
+        Def("exec_args", (c, name, nameLen, args, argsLen) =>
+        {
+            var file = ReadName(c, name, nameLen);
+            if ((uint) argsLen > WasmHost.MaxArgs)
+                return -4;
+
+            return RequestExec(Io(c), file, ReadText(c, args, argsLen));
+        });
+
+        Def("args", (c, buf, cap) => WriteText(c, buf, cap, Io(c).Args));
+
+        // Random numbers, a different sequence for every process.
+        Def("random", c =>
+        {
+            var io = Io(c);
+            var x = io.Rng;
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            io.Rng = x;
+            return (int) (x >> 33);
+        });
+    }
+
+    /// <summary>
+    /// Starts the program in a file once the current call returns.
+    /// </summary>
+    private static int RequestExec(MachineIo io, string name, string args)
+    {
+        if (io.Depth >= WasmHost.MaxDepth)
+            return -3;
+
+        var data = io.Disk.Read(name);
+        if (data == null && !io.Host.IsSystemProgram(name))
+            return -1;
+
+        if (data != null && !IsProgram(data))
+            return -2;
+
+        io.Exec = (name, args);
+        return 0;
+    }
+
+    private void DefineDisk()
+    {
+        Def("fs_list", (c, buf, cap) => WriteText(c, buf, cap, string.Join('\n', Io(c).Disk.Files.Select(f => f.Key))));
+
+        Def("fs_read", (c, name, nameLen, buf, cap) =>
+        {
+            var data = Io(c).Disk.Read(ReadName(c, name, nameLen));
+            if (data == null)
+                return -1;
+
+            WriteBytes(c, buf, cap, data);
+            return data.Length;
+        });
+
+        Def("fs_write", (c, name, nameLen, data, len) =>
+        {
+            var file = ReadName(c, name, nameLen);
+            if ((uint) len > MachineDisk.MaxBytes)
+                return -2;
+
+            return Io(c).Disk.Write(file, ReadBytes(c, data, len)) switch
+            {
+                DiskError.None => 0,
+                DiskError.BadName => -1,
+                _ => -2,
+            };
+        });
+
+        Def("fs_delete", (c, name, len) => Io(c).Disk.Remove(ReadName(c, name, len)) ? 0 : -1);
+    }
+
+    private void DefineNetwork()
+    {
+        Def("net_addr", c => Io(c).Address is { } addr ? addr : -1L);
+
+        // Sends len bytes to addr on port: 0 sent, -1 unreachable (or not connected), -2 too big, -3 too many
+        // this tick, -4 bad port.
+        Def("net_send", (c, addr, port, ptr, len) =>
+        {
+            if ((uint) len > WasmHost.MaxPacket)
+                return -2;
+
+            if (port is < 0 or > ushort.MaxValue)
+                return -4;
+
+            var io = Io(c);
+            var to = (uint) addr;
+            if (io.Address is not { } from || io.Reachable is not { } reachable || !reachable.Contains(to))
+                return -1;
+
+            if (io.Outbox.Count >= WasmHost.OutboxPerTick)
+                return -3;
+
+            io.Outbox.Add(new Packet(from, to, (ushort) port, ReadBytes(c, ptr, len)));
+            return 0;
+        });
+
+        // Takes the next packet: its sender and port go to meta (two little-endian u32s), up to cap bytes of
+        // it to buf. Returns its full length, or -1 if none is waiting.
+        Def("net_recv", (c, meta, buf, cap) =>
+        {
+            if (!Io(c).Inbox.TryDequeue(out var packet))
+                return -1;
+
+            Span<byte> header = stackalloc byte[8];
+            BitConverter.TryWriteBytes(header, packet.From);
+            BitConverter.TryWriteBytes(header[4..], (uint) packet.Port);
+            WriteBytes(c, meta, 8, header);
+            WriteBytes(c, buf, Math.Max(cap, 0), packet.Data);
+            return packet.Data.Length;
+        });
+
+        Def("net_neighbours", (c, buf, cap) => WriteIds(c, buf, cap, Io(c).Neighbours));
+    }
+
+    /// <summary>
+    /// Writes as many ids as fit into the program's memory, as little-endian u32s, and returns how many there
+    /// are in all.
+    /// </summary>
+    private static int WriteIds(Caller caller, int buf, int cap, IReadOnlyList<uint> ids)
+    {
+        var fit = Math.Min(Math.Max(cap, 0) / 4, ids.Count);
+        var bytes = new byte[fit * 4];
+        for (var i = 0; i < fit; i++)
+        {
+            BitConverter.TryWriteBytes(bytes.AsSpan(i * 4), ids[i]);
+        }
+
+        WriteBytes(caller, buf, bytes.Length, bytes);
+        return ids.Count;
+    }
+
+    private void DefineTerminal()
+    {
+        Def("term_write", (c, ptr, len) =>
+        {
+            var bytes = ReadBytes(c, ptr, Math.Min(len, WasmHost.OutputPerTick + 1));
+
+            // Raw mode is switched by the kernel, not by text.
+            var text = Encoding.UTF8.GetString(bytes).Replace(TerminalText.RawOn.ToString(), "")
+                .Replace(TerminalText.RawOff.ToString(), "");
+            Io(c).Write(text);
+        });
+
+        Def("term_read", (c, buf, cap) =>
+        {
+            var io = Io(c);
+
+            // Background jobs have no terminal to read.
+            if (io.Job != 0)
+                return 0;
+
+            var count = Math.Min(Math.Max(cap, 0), io.Input.Count);
+            var bytes = io.Input.GetRange(0, count).ToArray();
+            io.Input.RemoveRange(0, count);
+            WriteBytes(c, buf, cap, bytes);
+            return count;
+        });
+
+        Def("term_size", c => Io(c).Is(DeviceKind.Computer) ? WasmHost.TermRows * 65536 + WasmHost.TermCols : -1);
+
+        Def("term_raw", (c, on) =>
+        {
+            var io = Io(c);
+            if (io.Is(DeviceKind.Computer) && io.Job == 0)
+                io.SetRaw(on != 0);
+        });
+
+        Def("term_key", c =>
+        {
+            var io = Io(c);
+            if (io.Job != 0)
+                return -1;
+
+            return io.Keys.TryDequeue(out var key) ? key : -1;
+        });
+
+        Def("term_clear", c =>
+        {
+            var io = Io(c);
+            if (io.Is(DeviceKind.Computer))
+                io.Output.Append(TerminalText.Clear);
+        });
+    }
+
+    private void DefineTools()
+    {
+        Def("man", (c, topic, len, buf, cap) =>
+        {
+            var page = Kernel.Man(ReadName(c, topic, len));
+            return page == null ? -1 : WriteText(c, buf, cap, page);
+        });
+
+        Def("scaffold", (c, kind, len, buf, cap) =>
+        {
+            var text = Kernel.Scaffold(ReadName(c, kind, len));
+            return text == null ? -1 : WriteText(c, buf, cap, text);
+        });
+
+        Def("wire_program", (_, _, _) => -1);
+
+        Def("build", (c, src, srcLen, outName, outLen, err, errCap) =>
+        {
+            var io = Io(c);
+            if (!io.Is(DeviceKind.Computer))
+                return -1;
+
+            var source = ReadName(c, src, srcLen);
+            var output = ReadName(c, outName, outLen);
+            var code = io.Disk.Read(source);
+            if (code == null)
+                return -1;
+
+            if (code.Length > WasmHost.MaxSource)
+                return -2;
+
+            var bytes = BuildWat(io.Host, source, code, out var why);
+            if (bytes == null)
+            {
+                WriteText(c, err, errCap, why!);
+                return -3;
+            }
+
+            return io.Disk.Write(output, bytes) == DiskError.None ? bytes.Length : -4;
+        });
+
+        Def("flash", (c, addr, name, len) =>
+        {
+            var io = Io(c);
+            if (!io.Is(DeviceKind.Computer))
+                return -1;
+
+            // The world decides whether it can get there.
+            var file = ReadName(c, name, len);
+            var bytes = io.Disk.Read(file);
+            if (!IsProgram(bytes))
+                return -2;
+
+            io.Flash = new FirmwareFlash((uint) addr, file, bytes!);
+            return 0;
+        });
+    }
+
+    /// <summary>
+    /// Builds a source file into a program, or says why it doesn't build.
+    /// </summary>
+    private static byte[]? BuildWat(WasmHost host, string name, byte[] source, out string? why)
+    {
+        why = null;
+        if (!name.EndsWith(".wat"))
+        {
+            why = "Wire programs can't be built on this machine yet. Write WAT instead (man wat).";
+            return null;
+        }
+
+        try
+        {
+            var bytes = Module.ConvertText(Encoding.UTF8.GetString(source));
+            host.Load(bytes);
+            return bytes;
+        }
+        catch (WasmtimeException e)
+        {
+            why = e.Message.Trim();
+        }
+        catch (WasmLoadException e)
+        {
+            why = e.Message;
+        }
+
+        return null;
+    }
+
+    private void DefineDevices()
+    {
+        Def("device_io", DeviceIo);
+
+        Def("door_status", c =>
+        {
+            var io = Io(c);
+            if (io.Device is not DoorDevice door || !io.Is(DeviceKind.DoorController))
+                return -1;
+
+            return (door.Open ? 1 : 0) + (door.Bolted ? 2 : 0) + (door.Blocked ? 4 : 0);
+        });
+
+        // Each door function acts on the door as the program sees it this tick, and the world catches up
+        // after.
+        Def("door_open", c => DoorFunction(c, door => door.Bolted ? -3 : (door with { Open = true }, DeviceCommand.OpenDoor)));
+        Def("door_close", c => DoorFunction(c, door =>
+        {
+            if (door.Bolted)
+                return -3;
+
+            if (door.Open && door.Blocked)
+                return -4;
+
+            return (door with { Open = false }, DeviceCommand.CloseDoor);
+        }));
+        Def("door_bolt", c => DoorFunction(c, door => (door with { Bolted = true }, DeviceCommand.BoltDoor)));
+        Def("door_unbolt", c => DoorFunction(c, door => (door with { Bolted = false }, DeviceCommand.UnboltDoor)));
+
+        Def("request_name", (c, buf, cap) => Io(c).Request is { } who ? WriteText(c, buf, cap, who.Name) : -1);
+        Def("request_holding", (c, buf, cap) => Io(c).Request is { } who ? WriteText(c, buf, cap, who.Holding) : -1);
+        Def("request_cards",
+            (c, buf, cap) => Io(c).Request is { } who ? WriteText(c, buf, cap, string.Join('\n', who.Cards)) : -1);
+
+        Def("camera_count", c =>
+        {
+            var io = Io(c);
+            return io.Device is CameraDevice camera && io.Is(DeviceKind.Camera) ? camera.People.Count : -1;
+        });
+
+        Def("camera_names", (c, buf, cap) =>
+        {
+            var io = Io(c);
+            if (io.Device is not CameraDevice camera || !io.Is(DeviceKind.Camera))
+                return -1;
+
+            return WriteText(c, buf, cap, string.Join('\n', camera.People));
+        });
+    }
+
+    /// <summary>
+    /// What a door function does to the door: an error code, or the door as it now stands and the command
+    /// for the world.
+    /// </summary>
+    private readonly record struct DoorResult(DoorDevice? Door, DeviceCommand Command, int Error)
+    {
+        public static implicit operator DoorResult(int error) => new(null, default, error);
+
+        public static implicit operator DoorResult((DoorDevice Door, DeviceCommand Command) ok) =>
+            new(ok.Door, ok.Command, 0);
+    }
+
+    private static int DoorFunction(Caller caller, Func<DoorDevice, DoorResult> act)
+    {
+        var io = Io(caller);
+        if (!io.Is(DeviceKind.DoorController) || io.Device is not DoorDevice door)
+            return -1;
+
+        var result = act(door);
+        if (result.Door == null)
+            return result.Error;
+
+        io.Device = result.Door;
+        io.Command(result.Command);
+        return 0;
+    }
+
+    /// <summary>
+    /// Device I/O on port 0, the device the machine is wired to, from kernel v0.
+    /// </summary>
+    /// <remarks>
+    /// A door: <c>buf[0]</c> is the command (0 status, 1 open, 2 close); the door's state (1 open, 0 closed)
+    /// is written back to <c>buf[0]</c> and 1 returned. A bolted door refuses with -3, and so does closing one
+    /// with someone in it. A camera: how many people it sees is written to <c>buf</c> as a little-endian u32,
+    /// and 4 returned. -1 for no device (or another port), -2 for a bad request.
+    /// </remarks>
+    private static int DeviceIo(Caller caller, int port, int buf, int len)
+    {
+        var io = Io(caller);
+        if (port != 0)
+            return -1;
+
+        switch (io.Device)
+        {
+            case DoorDevice door:
+            {
+                if (len < 1)
+                    return -2;
+
+                var command = ReadBytes(caller, buf, 1)[0];
+                bool open;
+                switch (command)
+                {
+                    case 0:
+                        open = door.Open;
+                        break;
+                    case 1 or 2 when door.Bolted:
+                        return -3;
+                    case 1:
+                        io.Command(DeviceCommand.OpenDoor);
+                        open = true;
+                        break;
+                    case 2 when door.Open && door.Blocked:
+                        return -3;
+                    case 2:
+                        io.Command(DeviceCommand.CloseDoor);
+                        open = false;
+                        break;
+                    default:
+                        return door.Bolted ? -3 : -2;
+                }
+
+                // What the program sees next this tick, before the world catches up after it.
+                io.Device = door with { Open = open };
+                WriteBytes(caller, buf, 1, [(byte) (open ? 1 : 0)]);
+                return 1;
+            }
+            case CameraDevice camera:
+            {
+                if (len < 4)
+                    return -2;
+
+                Span<byte> count = stackalloc byte[4];
+                BitConverter.TryWriteBytes(count, (uint) camera.People.Count);
+                WriteBytes(caller, buf, 4, count);
+                return 4;
+            }
+            default:
+                return -1;
+        }
+    }
+
+    private void DefineJobs()
+    {
+        Def("job_start", (c, name, nameLen, args, argsLen) =>
+        {
+            var file = ReadName(c, name, nameLen);
+            if ((uint) argsLen > WasmHost.MaxArgs)
+                return -4;
+
+            var arguments = ReadText(c, args, argsLen);
+            var io = Io(c);
+            if (io.Jobs.Count + io.Spawns.Count >= WasmHost.MaxJobs)
+                return -3;
+
+            var data = io.Disk.Read(file);
+            if (data == null && !io.Host.IsSystemProgram(file))
+                return -1;
+
+            if (data != null && !IsProgram(data))
+                return -2;
+
+            io.NextJob++;
+            io.Spawns.Add((io.NextJob, file, arguments));
+            return (int) io.NextJob;
+        });
+
+        Def("job_list", (c, buf, cap) =>
+            WriteText(c, buf, cap, string.Concat(Io(c).Jobs.Select(j => $"{j.Id} {j.Name}\n"))));
+
+        Def("job_kill", (c, id) =>
+        {
+            var io = Io(c);
+            if (!io.Jobs.Any(j => (int) j.Id == id))
+                return -1;
+
+            io.Kills.Add((uint) id);
+            return 0;
+        });
+    }
+
+    /// <summary>
+    /// ICE, decks and the body, which arrive with cyberspace and cyberware. Linked now so programs that use
+    /// them load; each returns -1 (or does nothing) until then, as on a machine they don't work on.
+    /// </summary>
+    private void DefineLater()
+    {
+        Def("ice_here", _ => -1L);
+        Def("ice_start", _ => -1);
+        Def("ice_integrity", _ => -1);
+        Def("ice_nodes", (_, _, _) => -1);
+        Def("ice_neighbours", (_, _, _) => -1);
+        Def("ice_go", (_, _) => -1);
+        Def("ice_chase", (_, _) => -1);
+        Def("ice_runners", (_, _, _) => -1);
+        Def("ice_attack", (_, _) => -1);
+        Def("ice_position", (_, _, _) => -1);
+        Def("ice_alert", (_, _, _) => -1);
+        Def("ice_go_to", (_, _, _) => -1);
+        Def("ice_mode", (_, _) => -1);
+
+        Def("deck_integrity", _ => -1);
+        Def("deck_status", _ => -1);
+        Def("deck_targets", (_, _, _) => -1);
+        Def("deck_strike", (_, _) => -1);
+        Def("deck_ward", _ => -1);
+        Def("deck_hold", (_, _, _) => -1);
+        Def("deck_push", (_, _, _, _) => -1);
+
+        Def("body_vitals", (_, _, _) => -1);
+        Def("body_alert", (_, _, _) => -1);
+        Def("body_inject", _ => -1);
+        Def("body_boost", _ => -1);
+    }
+}

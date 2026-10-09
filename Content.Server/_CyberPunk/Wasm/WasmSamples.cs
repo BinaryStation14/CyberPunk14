@@ -2,6 +2,7 @@ namespace Content.Server._CyberPunk.Wasm;
 
 /// <summary>
 /// Small hand-written programs that check the WASM host works, for the <c>wasmtest</c> command and tests.
+/// Each runs as a machine's firmware.
 /// </summary>
 public static class WasmSamples
 {
@@ -22,6 +23,7 @@ public static class WasmSamples
     /// </summary>
     public const string Spin = """
         (module
+          (memory (export "memory") 1)
           (func (export "start")
             (loop $forever
               (br $forever))))
