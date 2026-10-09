@@ -11,7 +11,8 @@
         (`man wire`) or by hand in WAT (`man wat`).
         Type `help` for the shell's commands, and `man` for the manual.
         Try `new hello`, `build hello.wire` and `run hello.wasm` for your first
-        Wire program. The examples folder has more: `ls`, then `cat` one.
+        Wire program. The examples folder has more: `ls examples`, then `cat` one.
+        The shell itself is a Wire program you can read and replace: `man boot`.
         Try `build keys.wat` and `run keys.wasm` to see raw mode.
         Data cable to a powered router networks it: `ip` shows its address,
         `hostname NAME` names it, and `hosts` lists every name the router knows.

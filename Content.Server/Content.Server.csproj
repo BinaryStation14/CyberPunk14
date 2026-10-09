@@ -26,6 +26,9 @@
   <ItemGroup>
     <Folder Include="EntityEffects\" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="_CyberPunk\Wasm\os.wire" LogicalName="CyberPunk14.os.wire" />
+  </ItemGroup>
   <Import Project="..\RobustToolbox\MSBuild\Robust.Properties.targets" />
   <Import Project="..\RobustToolbox\MSBuild\Robust.EntitySystemSubscriptionsGenerator.targets" />
 

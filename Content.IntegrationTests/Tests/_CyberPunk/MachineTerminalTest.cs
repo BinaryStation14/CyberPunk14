@@ -34,7 +34,7 @@ public sealed class MachineTerminalTest : InteractionTest
         // Open the terminal: it shows what the machine printed before it was opened.
         await Interact();
         var window = GetWindow<MachineTerminalWindow>();
-        Assert.That(window.Screen.Text, Does.Contain(StubOs.Name));
+        Assert.That(window.Screen.Text, Does.Contain(DefaultOs.Name));
 
         // A typed line runs on the machine, and its output reaches the window.
         await TypeLine("echo first line");
@@ -84,7 +84,7 @@ public sealed class MachineTerminalTest : InteractionTest
         await PressKey(EngineKeyFunctions.Use);
         await RunTicks(15);
         var window = GetWindow<MachineTerminalWindow>();
-        Assert.That(window.Screen.Text, Does.Contain(StubOs.Name));
+        Assert.That(window.Screen.Text, Does.Contain(DefaultOs.Name));
         Assert.That(window.Screen.Text, Does.Contain("kept output"));
     }
 }

@@ -29,6 +29,11 @@ public enum VmState : byte
 /// </remarks>
 public sealed class Vm : IDisposable
 {
+    /// <summary>
+    /// The file on a machine's disk it boots instead of the default OS, if it has one.
+    /// </summary>
+    public const string BootFile = "boot.wasm";
+
     private readonly MachineIo _io = new();
 
     /// <summary>The terminal's programs, the OS at the bottom.</summary>
@@ -42,6 +47,15 @@ public sealed class Vm : IDisposable
 
     /// <summary>What it boots instead of the OS: a device's firmware.</summary>
     private (string Name, Module Module)? _firmware;
+
+    /// <summary>Whether the OS running came from <see cref="BootFile"/>.</summary>
+    private bool _bootedFromDisk;
+
+    /// <summary>
+    /// Whether <see cref="BootFile"/> stopped, so the machine boots the default OS until it's rebooted or
+    /// loses power.
+    /// </summary>
+    private bool _safeBoot;
 
     public VmState State { get; private set; } = VmState.Off;
 
@@ -119,6 +133,7 @@ public sealed class Vm : IDisposable
             _io.Output.Append("\n[power restored: rebooting]\n");
 
         _bootedBefore = true;
+        _safeBoot = false;
         Boot(host);
     }
 
@@ -136,6 +151,7 @@ public sealed class Vm : IDisposable
         _io.Spawns.Clear();
         _io.Kills.Clear();
         _io.Exit = null;
+        _io.Reboot = false;
         _io.Inbox.Clear();
         _io.Outbox.Clear();
         _io.DeviceCommands.Clear();
@@ -147,10 +163,38 @@ public sealed class Vm : IDisposable
         _io.Output.Append("\n[power lost]\n");
     }
 
+    /// <summary>
+    /// Starts the OS: a device's firmware, else <see cref="BootFile"/> from the disk, else the default OS. A
+    /// boot file that won't start, or stopped since the last reboot, is passed over for the default OS.
+    /// </summary>
     private void Boot(WasmHost host)
     {
         EndAll();
         _io.SetRaw(false);
+        _io.Reboot = false;
+        _bootedFromDisk = false;
+
+        if (_firmware == null && _io.Disk.Read(BootFile) is { } bytes)
+        {
+            if (_safeBoot)
+            {
+                _io.Output.Append($"[{BootFile} stopped: starting the default OS]\n");
+            }
+            else
+            {
+                try
+                {
+                    _procs.Add(Spawn(host, BootFile, host.Load(bytes), ""));
+                    _bootedFromDisk = true;
+                    State = VmState.Running;
+                    return;
+                }
+                catch (WasmLoadException e)
+                {
+                    _io.Output.Append($"[{BootFile} won't boot: {e.Message}; starting the default OS]\n");
+                }
+            }
+        }
 
         var (name, os) = _firmware ?? ("os", host.Os);
         try
@@ -179,8 +223,29 @@ public sealed class Vm : IDisposable
         Boot(host);
     }
 
+    /// <summary>
+    /// Restarts the machine at once, as a program asked: it tries <see cref="BootFile"/> again.
+    /// </summary>
+    private void Reboot(WasmHost host)
+    {
+        _io.Exec = null;
+        _io.Exit = null;
+        _io.Spawns.Clear();
+        _io.Kills.Clear();
+        _io.Keys.Clear();
+        _io.Editor.Clear();
+        _io.Output.Append("\n[rebooting]\n");
+        _safeBoot = false;
+        Boot(host);
+    }
+
     private void HaltMachine()
     {
+        // An OS from the disk that stops isn't booted again until the machine is rebooted.
+        if (_bootedFromDisk)
+            _safeBoot = true;
+
+        _bootedFromDisk = false;
         State = VmState.Halted;
         RebootAtMs = _io.ClockMs + WasmHost.RebootDelayMs;
     }
@@ -551,6 +616,12 @@ public sealed class Vm : IDisposable
         }
 
         _jobs.RemoveAll(j => j.Procs.Count == 0);
+
+        if (_io.Reboot)
+        {
+            Reboot(host);
+            return used;
+        }
 
         StartAndKillJobs(host);
         return used;
