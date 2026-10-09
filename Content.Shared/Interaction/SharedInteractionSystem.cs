@@ -152,6 +152,9 @@ namespace Content.Shared.Interaction
         {
             _uiQuery.TryComp(ev.Target, out var aUiComp);
 
+            // CyberPunk: a ghost that can't interact is a spectator. It may open the UI to look,
+            // but every other message from it is rejected here.
+            var spectator = false;
             if (!_actionBlockerSystem.CanInteract(ev.Actor, ev.Target))
             {
                 // We permit ghosts to open uis unless explicitly blocked
@@ -162,6 +165,8 @@ namespace Content.Shared.Interaction
                     ev.Cancel();
                     return;
                 }
+
+                spectator = true;
             }
 
             var range = _ui.GetUiRange(ev.Target, ev.UiKey);
@@ -183,6 +188,10 @@ namespace Content.Shared.Interaction
 
             // Key shouldn't ever be null.
             if (!aUiComp.Key.Equals(ev.UiKey))
+                return;
+
+            // CyberPunk: spectators don't need complex interaction and aren't kept out by the single user.
+            if (spectator)
                 return;
 
             if (aUiComp.SingleUser && aUiComp.CurrentSingleUser != null && aUiComp.CurrentSingleUser != ev.Actor)

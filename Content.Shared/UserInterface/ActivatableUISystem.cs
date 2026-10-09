@@ -102,7 +102,12 @@ public sealed partial class ActivatableUISystem : EntitySystem
         if (_whitelistSystem.IsWhitelistFail(component.RequiredItems, args.Using ?? default))
             return false;
 
-        if (component.RequiresComplex)
+        // CyberPunk: spectating ghosts may view machines that need hands, but not items that must be held.
+        var spectator = IsSpectator(args.User, uid);
+        if (spectator && component.RequiresComplex && component.InHandsOnly)
+            return false;
+
+        if (component.RequiresComplex && !spectator)
         {
             if (args.Hands == null)
                 return false;
@@ -205,7 +210,11 @@ public sealed partial class ActivatableUISystem : EntitySystem
         if (!_blockerSystem.CanInteract(user, uiEntity) && (!HasComp<GhostComponent>(user) || aui.BlockSpectators))
             return false;
 
-        if (aui.RequiresComplex)
+        // CyberPunk: a spectating ghost only looks, so it skips the complex and single-user checks
+        // and never becomes the single user.
+        var spectator = IsSpectator(user, uiEntity);
+
+        if (aui.RequiresComplex && !spectator)
         {
             if (!_blockerSystem.CanComplexInteract(user))
                 return false;
@@ -226,7 +235,7 @@ public sealed partial class ActivatableUISystem : EntitySystem
         if (aui.AdminOnly && !_adminManager.IsAdmin(user))
             return false;
 
-        if (aui.SingleUser && aui.CurrentSingleUser != null && user != aui.CurrentSingleUser)
+        if (aui.SingleUser && aui.CurrentSingleUser != null && user != aui.CurrentSingleUser && !spectator)
         {
             var message = Loc.GetString("machine-already-in-use", ("machine", uiEntity));
             _popupSystem.PopupEntity(message, uiEntity, user);
@@ -244,14 +253,15 @@ public sealed partial class ActivatableUISystem : EntitySystem
 
         // Give the UI an opportunity to prepare itself if it needs to do anything
         // before opening
-        var bae = new BeforeActivatableUIOpenEvent(user);
+        var bae = new BeforeActivatableUIOpenEvent(user, spectator);
         RaiseLocalEvent(uiEntity, bae);
 
-        SetCurrentSingleUser(uiEntity, user, aui);
+        if (!spectator)
+            SetCurrentSingleUser(uiEntity, user, aui);
         _uiSystem.OpenUi(uiEntity, aui.Key, user);
 
         //Let the component know a user opened it so it can do whatever it needs to do
-        var aae = new AfterActivatableUIOpenEvent(user);
+        var aae = new AfterActivatableUIOpenEvent(user, spectator);
         RaiseLocalEvent(uiEntity, aae);
 
         return true;

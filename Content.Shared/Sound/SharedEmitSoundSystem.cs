@@ -59,6 +59,10 @@ public abstract partial class SharedEmitSoundSystem : EntitySystem
 
     private void HandleEmitSoundOnUIOpen(EntityUid uid, EmitSoundOnUIOpenComponent component, AfterActivatableUIOpenEvent args)
     {
+        // CyberPunk: spectating ghosts open UIs silently.
+        if (args.Spectator)
+            return;
+
         if (_whitelistSystem.IsWhitelistFail(component.Blacklist, args.User))
         {
             TryEmitSound(uid, component, args.User);
