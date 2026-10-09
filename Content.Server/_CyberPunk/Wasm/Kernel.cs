@@ -411,9 +411,10 @@ public static class Kernel
           write FILE TEXT...         write text to a file (replacing it)
           append FILE TEXT...        add a line of text to a file
           rm FILE                    delete a file
+          nano FILE                  edit a text file (Ctrl+G in it for help)
           new NAME [KIND]            start a Wire program, NAME.wire, for a computer
                                      (or a door, camera, ice, deck or implant; os
-                                     for the operating system's own source)
+                                     or nano for their own source)
           build FILE.wire [OUT.wasm] build a program (man wire)
           run FILE [ARGS...]         run a program
           run FILE [ARGS...] &       run it as a background job: it runs alongside
@@ -609,12 +610,13 @@ public static class Kernel
     }
 
     /// <summary>
-    /// A starting Wire program for a kind of machine, or the default OS's own source for <c>os</c>; null if
-    /// there's none for it.
+    /// A starting Wire program for a kind of machine, the default OS's own source for <c>os</c>, or a system
+    /// program's (<see cref="SystemPrograms"/>) for its name; null if there's none for it.
     /// </summary>
     public static string? Scaffold(string kind)
     {
-        return kind.Trim() == "os" ? DefaultOs.Source : WireManual.Scaffold(kind);
+        kind = kind.Trim();
+        return kind == "os" ? DefaultOs.Source : SystemPrograms.Source(kind) ?? WireManual.Scaffold(kind);
     }
 
     /// <summary>

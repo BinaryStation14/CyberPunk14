@@ -125,7 +125,7 @@ public sealed class ProgramUiView : BoxContainer
 /// <summary>
 /// A program's drawing: rectangles, lines and text on a black background, clipped to its size.
 /// </summary>
-public sealed class ProgramCanvas : Control
+public sealed partial class ProgramCanvas : Control
 {
     [Dependency] private IResourceCache _cache = default!;
 
