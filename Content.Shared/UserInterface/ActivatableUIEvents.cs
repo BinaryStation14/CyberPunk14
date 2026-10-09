@@ -46,12 +46,18 @@ public sealed class UserOpenActivatableUIAttemptEvent(EntityUid user, EntityUid 
 /// <summary>
 /// Raised on the entity with an activatable UI after the UI has been opened.
 /// </summary>
-public sealed class AfterActivatableUIOpenEvent(EntityUid user) : EntityEventArgs
+public sealed class AfterActivatableUIOpenEvent(EntityUid user, bool spectator = false) : EntityEventArgs
 {
     /// <summary>
     /// The player that opened the UI.
     /// </summary>
     public readonly EntityUid User = user;
+
+    /// <summary>
+    /// CyberPunk: whether the user is a ghost that can only look at the UI.
+    /// Handlers should not change the machine or take control of it for a spectator.
+    /// </summary>
+    public readonly bool Spectator = spectator;
 }
 
 /// <summary>
@@ -59,12 +65,18 @@ public sealed class AfterActivatableUIOpenEvent(EntityUid user) : EntityEventArg
 /// but before the UI actually opens.
 /// Use this if you need to prepare the UI itself.
 /// </summary>
-public sealed class BeforeActivatableUIOpenEvent(EntityUid user) : EntityEventArgs
+public sealed class BeforeActivatableUIOpenEvent(EntityUid user, bool spectator = false) : EntityEventArgs
 {
     /// <summary>
     /// The player that is opening the UI.
     /// </summary>
     public readonly EntityUid User = user;
+
+    /// <summary>
+    /// CyberPunk: whether the user is a ghost that can only look at the UI.
+    /// Handlers should not change the machine or take control of it for a spectator.
+    /// </summary>
+    public readonly bool Spectator = spectator;
 }
 
 public sealed class ActivatableUIPlayerChangedEvent : EntityEventArgs

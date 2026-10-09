@@ -42,6 +42,10 @@ public sealed partial class ActivatableUISystem
         if (!args.UiKey.Equals(activatable.Key))
             return;
 
+        // CyberPunk: a spectating ghost doesn't switch the device on.
+        if (IsSpectator(args.Actor, uid))
+            return;
+
         _toggle.TryActivate(uid);
     }
 
@@ -53,7 +57,8 @@ public sealed partial class ActivatableUISystem
             return;
 
         // Stop drawing power if this was the last person with the UI open.
-        if (!_uiSystem.IsUiOpen(uid, activatable.Key))
+        // CyberPunk: spectating ghosts don't keep it drawing power.
+        if (!IsUiOpenByNonSpectator(uid, activatable.Key))
             _toggle.TryDeactivate(uid);
     }
 

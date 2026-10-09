@@ -51,10 +51,14 @@ public sealed partial class BlockGameArcadeSystem : EntitySystem
 
     private void OnAfterUIOpen(EntityUid uid, BlockGameArcadeComponent component, AfterActivatableUIOpenEvent args)
     {
-        if (component.Player == null)
-            component.Player = args.User;
-        else
-            component.Spectators.Add(args.User);
+        // CyberPunk: a spectating ghost watches without joining the queue to play.
+        if (!args.Spectator)
+        {
+            if (component.Player == null)
+                component.Player = args.User;
+            else
+                component.Spectators.Add(args.User);
+        }
 
         UpdatePlayerStatus(uid, args.User, component);
         component.Game?.UpdateNewPlayerUI(args.User);

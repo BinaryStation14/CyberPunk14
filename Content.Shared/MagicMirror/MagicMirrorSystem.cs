@@ -178,6 +178,10 @@ public sealed partial class MagicMirrorSystem : EntitySystem
 
     private void OnBeforeUIOpen(Entity<MagicMirrorComponent> ent, ref BeforeActivatableUIOpenEvent args)
     {
+        // CyberPunk: a spectating ghost mustn't become the mirror's target.
+        if (args.Spectator)
+            return;
+
         UpdateInterface(ent, args.User);
     }
 
