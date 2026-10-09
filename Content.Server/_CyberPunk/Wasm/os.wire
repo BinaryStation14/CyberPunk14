@@ -1,14 +1,14 @@
-# The CyberPunk14 OS: the shell every computer boots, unless its disk has a
-# boot.wasm of its own (man boot). It is a Wire program like any other.
+# Gridline OS: the shell every computer boots, unless its disk has a
+# boot.bin of its own (man boot). It is a Wire program like any other.
 #
 # To make your own, change a copy and boot it:
 #     new myos os
-#     build myos.wire boot.wasm
+#     build myos.wire boot.bin
 #     reboot
 # If it won't start, or stops, the computer boots this one instead until it is
-# rebooted; `rm boot.wasm` then `reboot` puts things back.
+# rebooted; `rm boot.bin` then `reboot` puts things back.
 
-NAME = "CyberPunk14 OS 1.0"
+NAME = "Gridline OS 4.2"
 PROMPT = "$ "
 
 # The terminal takes 4 KiB a tick, so long output (a file, a manual page)
@@ -32,10 +32,10 @@ HELP = [
     "rm FILE                    delete a file",
     "nano FILE                  edit a text file",
     "new NAME [KIND]            start a Wire program, NAME.wire (man shell)",
-    "build FILE [OUT.wasm]      build a program from Wire (or WAT)",
+    "build FILE [OUT.bin]       build a program from Wire (or WAT)",
     "run FILE [ARGS...] [&]     run a program (& in the background)",
     "jobs, kill N               background jobs: list, stop one",
-    "flash ADDR FILE.wasm       put a program on a door or camera",
+    "flash ADDR FILE.bin        put a program on a door or camera",
     "hold FILE, push [ADDR] FILE  on a deck: hold a program, copy a file",
     "hostname [NAME]            show or set this computer's network name",
     "hosts, ip                  names the router knows; this address",
@@ -215,7 +215,7 @@ def new(rest):
         kind = words[1]
     base = without(words[0], ".wire")
     file = base + ".wire"
-    program = base + ".wasm"
+    program = base + ".bin"
     if fs.size(file) != None:
         say("new: " + file + " already exists\n")
         return
@@ -234,7 +234,7 @@ def new(rest):
     if kind == "os":
         say("wrote " + file + ", the operating system's source. Next:\n")
         say("  cat " + file + "   read it\n")
-        say("  build " + file + " boot.wasm   build it to boot\n")
+        say("  build " + file + " boot.bin   build it to boot\n")
         say("  reboot   boot it (man boot)\n")
         return
     say("wrote " + file + ", a " + kind + " program. Next:\n")
@@ -250,10 +250,10 @@ def new(rest):
 def build(rest):
     words = rest.split()
     if len(words) == 0 or len(words) > 2:
-        say("usage: build FILE.wire [OUT.wasm]   (or FILE.wat)\n")
+        say("usage: build FILE.wire [OUT.bin]   (or FILE.wat)\n")
         return
     source = words[0]
-    program = without(without(source, ".wire"), ".wat") + ".wasm"
+    program = without(without(source, ".wire"), ".wat") + ".bin"
     if len(words) == 2:
         program = words[1]
     size = sys.build(source, program)
@@ -303,7 +303,7 @@ def kill(rest):
 def flash(rest):
     words = rest.split()
     if len(words) != 2:
-        say("usage: flash ADDR FILE.wasm\n")
+        say("usage: flash ADDR FILE.bin\n")
     elif sys.flash(words[0], words[1]):
         say("flashing " + words[1] + " to " + words[0] + "...\n")
     else:

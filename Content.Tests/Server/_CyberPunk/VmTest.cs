@@ -165,9 +165,9 @@ public sealed class VmTest
     public void AProgramRunsAndPrints()
     {
         using var m = Machine.Boot(_host);
-        Assert.That(m.Upload("hello.wasm", WasmSamples.Hello), Is.Null);
+        Assert.That(m.Upload("hello.bin", WasmSamples.Hello), Is.Null);
 
-        var output = m.Command("run hello.wasm");
+        var output = m.Command("run hello.bin");
         Assert.That(output, Does.Contain("Hello from WASM!"));
 
         // And control comes back to the shell.
@@ -179,7 +179,7 @@ public sealed class VmTest
     public void ProgramsGetTheirArguments()
     {
         using var m = Machine.Boot(_host);
-        m.Upload("args.wasm", """
+        m.Upload("args.bin", """
             (module
               (import "sb_v1" "args" (func $args (param i32 i32) (result i32)))
               (import "sb_v0" "term_write" (func $write (param i32 i32)))
@@ -188,9 +188,9 @@ public sealed class VmTest
                 (call $write (i32.const 0) (call $args (i32.const 0) (i32.const 256)))))
             """);
 
-        Assert.That(m.Command("run args.wasm one two  three"), Does.Contain("one two  three"));
+        Assert.That(m.Command("run args.bin one two  three"), Does.Contain("one two  three"));
         Assert.That(m.Command("run"), Does.Contain("usage: run"));
-        Assert.That(m.Command("run missing.wasm"), Does.Contain("run: missing.wasm: no such file"));
+        Assert.That(m.Command("run missing.bin"), Does.Contain("run: missing.bin: no such file"));
         m.Command("write notes.txt not a program");
         Assert.That(m.Command("run notes.txt"), Does.Contain("run: notes.txt: not a program"));
     }
@@ -199,9 +199,9 @@ public sealed class VmTest
     public void AnEndlessLoopIsKilledQuicklyAndTheShellCarriesOn()
     {
         using var m = Machine.Boot(_host);
-        m.Upload("spin.wasm", WasmSamples.Spin);
+        m.Upload("spin.bin", WasmSamples.Spin);
         m.Screen = "";
-        m.Vm.TypeLine("run spin.wasm");
+        m.Vm.TypeLine("run spin.bin");
 
         var slowest = TimeSpan.Zero;
         for (var i = 0; i < 10 && !m.Screen.Contains("time budget"); i++)
@@ -211,7 +211,7 @@ public sealed class VmTest
                 slowest = took;
         }
 
-        Assert.That(m.Screen, Does.Contain("[spin.wasm killed: it used up its time budget]"));
+        Assert.That(m.Screen, Does.Contain("[spin.bin killed: it used up its time budget]"));
 
         // One call's budget, well under a tick in a release build; generous for debug builds and busy machines.
         Assert.That(slowest, Is.LessThan(TimeSpan.FromMilliseconds(250)));
@@ -224,7 +224,7 @@ public sealed class VmTest
         using var m = Machine.Boot(_host);
 
         // Grows its memory until refused, then says so.
-        m.Upload("hog.wasm", """
+        m.Upload("hog.bin", """
             (module
               (import "sb_v0" "term_write" (func $write (param i32 i32)))
               (memory (export "memory") 1)
@@ -236,30 +236,30 @@ public sealed class VmTest
                     (br $grow)))
                 (call $write (i32.const 0) (i32.const 6))))
             """);
-        Assert.That(m.Command("run hog.wasm"), Does.Contain("capped"));
+        Assert.That(m.Command("run hog.bin"), Does.Contain("capped"));
 
         // One that asks for too much up front doesn't start at all.
         Assert.That(2000 * 65536L, Is.GreaterThan(WasmHost.MemoryLimit));
-        m.Upload("huge.wasm", """(module (memory (export "memory") 2000) (func (export "start")))""");
-        Assert.That(m.Command("run huge.wasm"), Does.Contain("could not run huge.wasm"));
+        m.Upload("huge.bin", """(module (memory (export "memory") 2000) (func (export "start")))""");
+        Assert.That(m.Command("run huge.bin"), Does.Contain("could not run huge.bin"));
     }
 
     [Test]
     public void CrashingProgramsAreReportedAndCleanedUp()
     {
         using var m = Machine.Boot(_host);
-        m.Upload("recurse.wasm", """
+        m.Upload("recurse.bin", """
             (module
               (memory (export "memory") 1)
               (func $deeper (call $deeper))
               (func (export "start") (call $deeper)))
             """);
         // Players see why it trapped, not the start of a backtrace.
-        Assert.That(m.Command("run recurse.wasm"), Does.Contain("[recurse.wasm crashed: wasm trap: call stack exhausted]"));
+        Assert.That(m.Command("run recurse.bin"), Does.Contain("[recurse.bin crashed: wasm trap: call stack exhausted]"));
 
         // Pointers outside its memory trap instead of reading the host's.
-        m.Upload("snoop.wasm", WasmSamples.BadPointer);
-        Assert.That(m.Command("run snoop.wasm"), Does.Contain("[snoop.wasm crashed"));
+        m.Upload("snoop.bin", WasmSamples.BadPointer);
+        Assert.That(m.Command("run snoop.bin"), Does.Contain("[snoop.bin crashed"));
         Assert.That(m.Vm.Processes, Is.EqualTo(new[] { "os" }));
     }
 
@@ -268,16 +268,16 @@ public sealed class VmTest
     {
         using var m = Machine.Boot(_host);
 
-        Assert.That(m.Vm.Upload(_host, "junk.wasm", "not wasm at all"u8.ToArray()), Does.Contain("not a valid program"));
-        Assert.That(m.Upload("future.wasm",
+        Assert.That(m.Vm.Upload(_host, "junk.bin", "not wasm at all"u8.ToArray()), Does.Contain("not a valid program"));
+        Assert.That(m.Upload("future.bin",
                 """(module (import "sb_v9" "teleport" (func)) (memory (export "memory") 1) (func (export "start")))"""),
             Does.Contain("needs host API v9"));
-        Assert.That(m.Upload("other.wasm",
+        Assert.That(m.Upload("other.bin",
                 """(module (import "env" "f" (func)) (memory (export "memory") 1) (func (export "start")))"""),
             Does.Contain("imports \"env\""));
-        Assert.That(m.Upload("lib.wasm", """(module (memory (export "memory") 1))"""), Does.Contain("start"));
+        Assert.That(m.Upload("lib.bin", """(module (memory (export "memory") 1))"""), Does.Contain("start"));
         Assert.That(m.Upload("../evil", WasmSamples.Hello), Is.Not.Null);
-        Assert.That(m.Command("run junk.wasm"), Does.Contain("no such file"));
+        Assert.That(m.Command("run junk.bin"), Does.Contain("no such file"));
     }
 
     [Test]
@@ -286,17 +286,17 @@ public sealed class VmTest
         using var m = Machine.Boot(_host);
 
         // random arrived in v4, so a program importing it from sb_v0 doesn't link.
-        m.Upload("old.wasm", """
+        m.Upload("old.bin", """
             (module
               (import "sb_v0" "random" (func (result i32)))
               (memory (export "memory") 1)
               (func (export "start")))
             """);
-        Assert.That(m.Command("run old.wasm"), Does.Contain("could not run old.wasm"));
+        Assert.That(m.Command("run old.bin"), Does.Contain("could not run old.bin"));
 
         // And a program built for an older kernel still links against it.
-        m.Upload("v0.wasm", WasmSamples.Hello.Replace("sb_v4", "sb_v0"));
-        Assert.That(m.Command("run v0.wasm"), Does.Contain("Hello from WASM!"));
+        m.Upload("v0.bin", WasmSamples.Hello.Replace("sb_v4", "sb_v0"));
+        Assert.That(m.Command("run v0.bin"), Does.Contain("Hello from WASM!"));
     }
 
     [Test]
@@ -356,9 +356,9 @@ public sealed class VmTest
               (func (export "start") (call $write (i32.const 0) (i32.const 11))))
             """u8.ToArray());
 
-        Assert.That(m.Command("build hi.wat"), Does.Match(@"built hi\.wasm \(\d+ bytes\)"));
-        Assert.That(m.Command("run hi.wasm"), Does.Contain("built here"));
-        Assert.That(m.Command("build hi.wat other.wasm"), Does.Contain("built other.wasm"));
+        Assert.That(m.Command("build hi.wat"), Does.Match(@"built hi\.bin \(\d+ bytes\)"));
+        Assert.That(m.Command("run hi.bin"), Does.Contain("built here"));
+        Assert.That(m.Command("build hi.wat other.bin"), Does.Contain("built other.bin"));
 
         m.Vm.SeedFile("bad.wat", "(module (func (export \"start\") (i32.add)))"u8.ToArray());
         var bad = m.Command("build bad.wat");
@@ -379,7 +379,7 @@ public sealed class VmTest
     public void BackgroundJobsRunAlongsideTheShell()
     {
         using var m = Machine.Boot(_host);
-        m.Upload("once.wasm", """
+        m.Upload("once.bin", """
             (module
               (import "sb_v0" "term_write" (func $write (param i32 i32)))
               (import "sb_v0" "exit" (func $exit (param i32)))
@@ -390,20 +390,20 @@ public sealed class VmTest
                 (call $write (i32.const 0) (i32.const 8))
                 (call $exit (i32.const 0))))
             """);
-        m.Upload("loop.wasm", Loop);
+        m.Upload("loop.bin", Loop);
 
-        Assert.That(m.Command("run once.wasm &"), Does.Contain("[1] once.wasm"));
+        Assert.That(m.Command("run once.bin &"), Does.Contain("[1] once.bin"));
         m.RunUntil("job ran");
 
-        Assert.That(m.Command("run loop.wasm &"), Does.Contain("[2] loop.wasm"));
-        Assert.That(m.Command("jobs"), Does.Contain("[2] loop.wasm"));
+        Assert.That(m.Command("run loop.bin &"), Does.Contain("[2] loop.bin"));
+        Assert.That(m.Command("jobs"), Does.Contain("[2] loop.bin"));
         Assert.That(m.Vm.Jobs.Select(j => j.Id), Is.EqualTo(new uint[] { 2 }));
 
         // The shell still answers while it runs.
         Assert.That(m.Command("echo alongside"), Does.Contain("alongside"));
 
         Assert.That(m.Command("kill 2"), Does.Contain("stopping job 2"));
-        m.RunUntil("[job 2: loop.wasm killed]");
+        m.RunUntil("[job 2: loop.bin killed]");
         Assert.That(m.Vm.Jobs, Is.Empty);
         Assert.That(m.Command("jobs"), Does.Contain("(no background jobs)"));
         Assert.That(m.Command("kill 9"), Does.Contain("kill: no job 9"));
@@ -416,21 +416,21 @@ public sealed class VmTest
         using var m = Machine.Boot(_host);
 
         // Runs itself, so each copy stacks another on top until the kernel refuses.
-        m.Upload("nest.wasm", """
+        m.Upload("nest.bin", """
             (module
               (import "sb_v0" "exec" (func $exec (param i32 i32) (result i32)))
               (import "sb_v0" "term_write" (func $write (param i32 i32)))
               (memory (export "memory") 1)
-              (data (i32.const 0) "nest.wasm")
+              (data (i32.const 0) "nest.bin")
               (data (i32.const 16) "too deep\n")
               (func (export "start")
-                (if (i32.eq (call $exec (i32.const 0) (i32.const 9)) (i32.const -3))
+                (if (i32.eq (call $exec (i32.const 0) (i32.const 8)) (i32.const -3))
                   (then (call $write (i32.const 16) (i32.const 9)))))
               (func (export "tick")))
             """);
 
         m.Screen = "";
-        m.Vm.TypeLine("run nest.wasm");
+        m.Vm.TypeLine("run nest.bin");
         m.RunUntil("too deep");
         Assert.That(m.Vm.Processes, Has.Count.EqualTo(WasmHost.MaxDepth));
     }
@@ -441,7 +441,7 @@ public sealed class VmTest
         using var m = Machine.Boot(_host);
 
         // Prints the first key it gets, as a character, and ends.
-        m.Upload("key.wasm", """
+        m.Upload("key.bin", """
             (module
               (import "sb_v2" "term_raw" (func $raw (param i32)))
               (import "sb_v2" "term_key" (func $key (result i32)))
@@ -461,7 +461,7 @@ public sealed class VmTest
             """);
 
         m.Screen = "";
-        m.Vm.TypeLine("run key.wasm");
+        m.Vm.TypeLine("run key.bin");
         for (var i = 0; i < 10 && !m.Vm.IsRaw; i++)
         {
             m.Tick();
@@ -681,14 +681,14 @@ public sealed class VmTest
     public void AutorunRunsCommandsAtBoot()
     {
         using var m = new Machine(_host, new Vm());
-        Assert.That(m.Upload("hello.wasm", WasmSamples.Hello), Is.Null);
-        m.Vm.SeedFile("autorun", "echo first\n\nrun hello.wasm\necho never\n"u8.ToArray());
+        Assert.That(m.Upload("hello.bin", WasmSamples.Hello), Is.Null);
+        m.Vm.SeedFile("autorun", "echo first\n\nrun hello.bin\necho never\n"u8.ToArray());
         m.Vm.PowerOn(_host);
         m.RunUntil("Hello from WASM!");
         m.RunUntil("$ ");
 
         Assert.That(m.Screen, Does.Contain("autorun: echo first\nfirst\n"));
-        Assert.That(m.Screen, Does.Contain("autorun: run hello.wasm"));
+        Assert.That(m.Screen, Does.Contain("autorun: run hello.bin"));
         Assert.That(m.Screen, Does.Not.Contain("never"));
     }
 
@@ -752,8 +752,8 @@ public sealed class VmTest
     public void RebootRestartsTheMachine()
     {
         using var m = Machine.Boot(_host);
-        Assert.That(m.Upload("loop.wasm", Loop), Is.Null);
-        m.Command("run loop.wasm &");
+        Assert.That(m.Upload("loop.bin", Loop), Is.Null);
+        m.Command("run loop.bin &");
         Assert.That(m.Vm.Jobs, Has.Count.EqualTo(1));
 
         var screen = m.Command("reboot");

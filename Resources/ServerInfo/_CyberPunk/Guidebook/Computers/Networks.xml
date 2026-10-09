@@ -1,0 +1,33 @@
+<Document>
+  # Computer Networks
+
+  Computers talk to each other over data cable. A network is everything joined by cable, switches and routers; a router gives every computer on it an address, and connects it to the other networks.
+
+  <Box>
+    <GuideEntityEmbed Entity="CableDataStack"/>
+    <GuideEntityEmbed Entity="NetworkSwitch"/>
+    <GuideEntityEmbed Entity="NetworkRouter"/>
+  </Box>
+
+  ## Wiring it up
+  - [bold]Data cable[/bold] is laid like power cable, and joins the machines along it.
+  - A [bold]network switch[/bold] joins the cable on its tile and the four tiles beside it, and any switch or router next to it, into one network, while it has power.
+  - A [bold]network router[/bold] does the same, and also gives every computer on its network an address, connects its network to the others, and keeps the list of hostnames.
+
+  Without a powered router, cabled computers have no address and can't send anything.
+
+  ## Addresses and hostnames
+  - [mono]ip[/mono] shows a computer's address, like [mono]10.1.1.2[/mono]. A computer keeps its address while it stays on the network, but may get a different one if it is unplugged.
+  - [mono]hostname door-console[/mono] names a computer. Names are 1 to 32 of a-z, 0-9 and -, and are kept through reboots.
+  - [mono]hosts[/mono] lists every name the routers know.
+
+  Since addresses can change, programs should find each other by name.
+
+  ## Sending packets
+  In Wire, the [bold]net[/bold] module sends and receives:
+  - [mono]net.send(host, port, text)[/mono] sends up to 1024 bytes to an address or a hostname, on a port from 0 to 65535. It arrives the next tick.
+  - [mono]net.receive()[/mono] returns the packets that have arrived, each with [mono].sender[/mono], [mono].port[/mono] and [mono].text[/mono].
+  - [mono]net.neighbours()[/mono] lists the other machines on the same network.
+
+  The examples folder has [mono]ping.wire[/mono], [mono]echo_server.wire[/mono] and [mono]netscan.wire[/mono] to start from.
+</Document>

@@ -56,7 +56,7 @@ public sealed class MachineTerminalTest : InteractionTest
 
         // A program in raw mode gets each key as it's pressed.
         await TypeLine("build keys.wat");
-        await TypeLine("run keys.wasm");
+        await TypeLine("run keys.bin");
         await SendBui(MachineTerminalUiKey.Key, new MachineTerminalKeysMessage(['a', TerminalKeys.Up]));
         Assert.That(window.Screen.Text, Does.Contain("key 97\n"));
         Assert.That(window.Screen.Text, Does.Contain($"key {TerminalKeys.Up}\n"));
@@ -95,7 +95,7 @@ public sealed class MachineTerminalTest : InteractionTest
 
         // The program's UI takes the window's place of the screen.
         await TypeLine("build panel.wire");
-        await TypeLine("run panel.wasm");
+        await TypeLine("run panel.bin");
         await RunTicks(5);
         Assert.That(window.ShowingProgram, Is.True);
         Assert.That(window.Program.ChildCount, Is.EqualTo(1));
@@ -118,7 +118,7 @@ public sealed class MachineTerminalTest : InteractionTest
         await Interact();
         var window = GetWindow<MachineTerminalWindow>();
         await TypeLine("build examples/calc.wire");
-        await TypeLine("run examples/calc.wasm");
+        await TypeLine("run examples/calc.bin");
         await RunTicks(5);
         Assert.That(window.ShowingProgram, Is.True);
 

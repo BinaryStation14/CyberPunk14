@@ -265,14 +265,14 @@ public sealed class ProgramUiTest
 
         RunUntil("$ ");
         vm.TypeLine("build job.wire");
-        RunUntil("built job.wasm");
-        vm.TypeLine("run job.wasm &");
+        RunUntil("built job.bin");
+        vm.TypeLine("run job.bin &");
         RunUntil("False");
         Assert.That(vm.Ui, Is.Null);
 
         vm.TypeLine("build panel.wire");
-        RunUntil("built panel.wasm");
-        vm.TypeLine("run panel.wasm");
+        RunUntil("built panel.bin");
+        vm.TypeLine("run panel.bin");
         for (var i = 0; i < 20 && vm.Ui == null; i++)
         {
             Tick(vm);

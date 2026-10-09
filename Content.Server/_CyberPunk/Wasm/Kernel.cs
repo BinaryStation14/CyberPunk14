@@ -154,7 +154,7 @@ public static class Kernel
         new("exit", "(param $code i32)", KernelScope.Any, 0,
             "Ends the program once the current call returns."),
         new("reboot", "", KernelScope.Any, 7,
-            "Restarts the machine once the current call returns: everything running stops, and it boots afresh (from boot.wasm on its disk, if there is one: man boot)."),
+            "Restarts the machine once the current call returns: everything running stops, and it boots afresh (from boot.bin on its disk, if there is one: man boot)."),
         new("exec", "(param $name i32 $len i32) (result i32)", KernelScope.Any, 0,
             "Runs the program in a file once the current call returns; it takes over until it exits. 0 ok, -1 no such file, -2 not a program, -3 too many running."),
         new("exec_args", "(param $name i32 $len i32 $args i32 $args_len i32) (result i32)", KernelScope.Any, 1,
@@ -198,7 +198,7 @@ public static class Kernel
         new("scaffold", "(param $kind i32 $len i32 $buf i32 $cap i32) (result i32)", KernelScope.Any, 2,
             "Copies a starting Wire program for a kind of machine (computer, door, camera, ice, deck or implant), or the operating system's own source for os, into buf; returns its full length, or -1."),
         new("wire_program", "(param $buf i32 $cap i32) (result i32)", KernelScope.Any, 2,
-            "Kept for programs built for the old Wire runtime; always -1, since Wire now builds straight to WebAssembly."),
+            "Kept for programs built for the old Wire runtime; always -1, since Wire now builds straight to programs."),
         new("device_io", "(param $port i32 $buf i32 $len i32) (result i32)", KernelScope.Any, 0,
             "The old way to work a door or camera (port 0); use the door_ and camera_ functions instead."),
         new("term_write", "(param $text i32 $len i32)", KernelScope.Computer, 0,
@@ -415,13 +415,13 @@ public static class Kernel
           new NAME [KIND]            start a Wire program, NAME.wire, for a computer
                                      (or a door, camera, ice, deck or implant; os
                                      or nano for their own source)
-          build FILE.wire [OUT.wasm] build a program (man wire)
+          build FILE.wire [OUT.bin]  build a program (man wire)
           run FILE [ARGS...]         run a program
           run FILE [ARGS...] &       run it as a background job: it runs alongside
                                      the shell, without the terminal's input
           jobs, kill N               list the background jobs, stop one
-          build FILE.wat [OUT.wasm]  build a program written in WAT (man wat)
-          flash ADDR FILE.wasm       put a program on a door or camera (man flash)
+          build FILE.wat [OUT.bin]   build a program written in WAT (man wat)
+          flash ADDR FILE.bin        put a program on a door or camera (man flash)
           hold FILE, push [ADDR] FILE  on a deck (man deck)
           hostname [NAME], hosts, ip this computer's name, the network's, its address
           man [TOPIC]                these pages
@@ -472,16 +472,16 @@ public static class Kernel
     private const string BootPage = """
         BOOT
 
-        A computer boots boot.wasm from its own disk if it has one, and the
+        A computer boots boot.bin from its own disk if it has one, and the
         operating system it came with if not. So you can swap the OS:
 
           new myos os                 copy the OS's Wire source to myos.wire
-          build myos.wire boot.wasm   build your version to boot
+          build myos.wire boot.bin    build your version to boot
           reboot                      restart and boot it
 
-        If boot.wasm won't load, or ends or crashes, the computer starts the OS
+        If boot.bin won't load, or ends or crashes, the computer starts the OS
         it came with instead, until it is rebooted or loses power: so a broken
-        OS can't lock you out. `rm boot.wasm` then `reboot` puts things back.
+        OS can't lock you out. `rm boot.bin` then `reboot` puts things back.
 
         An OS is a program like any other (man hooks): its tick runs while it is
         in front, and it starts other programs with sys.run.
@@ -491,12 +491,12 @@ public static class Kernel
     private const string WatPage = """
         WAT (LOW LEVEL)
 
-        Programs are WebAssembly. You can write them in WAT, WebAssembly's text
-        form:
+        Programs are machine code. You can write them by hand in WAT, the
+        machine's assembly language:
 
           write prog.wat (module ...)    write it
-          build prog.wat                 builds prog.wasm (or says what's wrong)
-          run prog.wasm
+          build prog.wat                 builds prog.bin (or says what's wrong)
+          run prog.bin
 
         A program is (module ...) with: imports of the kernel functions it uses
         (man kernel), its memory exported as "memory", and the hooks it exports
@@ -508,7 +508,7 @@ public static class Kernel
     private const string FlashPage = """
         FLASH
 
-        flash ADDR FILE.wasm sends a program over the network to the door
+        flash ADDR FILE.bin sends a program over the network to the door
         controller or camera at ADDR, replacing its firmware. It boots the new
         program at once, and keeps it through power cuts.
 
@@ -552,7 +552,7 @@ public static class Kernel
           man flash      putting programs on devices
           man firmware   what doors and cameras do out of the box
           man kernel     low-level kernel functions
-          man wat        writing WebAssembly by hand
+          man wat        writing programs in assembly
 
         """;
 

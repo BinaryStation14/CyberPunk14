@@ -53,7 +53,7 @@ public sealed class WasmMachineTest : GameTest
 
             machines.TypeLine((computer, machine), "run hello.wat");
             machines.TypeLine((computer, machine), "build hello.wat");
-            machines.TypeLine((computer, machine), "run hello.wasm");
+            machines.TypeLine((computer, machine), "run hello.bin");
         });
 
         await server.WaitRunTicks(30);
@@ -66,7 +66,7 @@ public sealed class WasmMachineTest : GameTest
             // A new Wire program builds and runs on the machine itself.
             machines.TypeLine((computer, machine), "new greet");
             machines.TypeLine((computer, machine), "build greet.wire");
-            machines.TypeLine((computer, machine), "run greet.wasm");
+            machines.TypeLine((computer, machine), "run greet.bin");
         });
 
         await server.WaitRunTicks(30);

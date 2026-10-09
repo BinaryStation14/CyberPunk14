@@ -82,13 +82,13 @@ public sealed class MachineNetworkTest : GameTest
             Type(b, "hostname beta");
             Type(d, "hostname delta");
             Type(b, "build examples/echo_server.wire");
-            Type(b, "run examples/echo_server.wasm");
+            Type(b, "run examples/echo_server.bin");
             Type(d, "build examples/echo_server.wire");
-            Type(d, "run examples/echo_server.wasm");
+            Type(d, "run examples/echo_server.bin");
             Type(a, "build examples/ping.wire");
         });
 
-        await RunUntil(server, a, "built examples/ping.wasm");
+        await RunUntil(server, a, "built examples/ping.bin");
         await RunUntil(server, b, "echo server listening on beta");
         await RunUntil(server, a, "", ticks: 10);
 
@@ -105,7 +105,7 @@ public sealed class MachineNetworkTest : GameTest
             firstB = addrB.Value;
 
             Type(a, "hosts");
-            Type(a, "run examples/ping.wasm beta hello");
+            Type(a, "run examples/ping.bin beta hello");
         });
 
         await RunUntil(server, a, "reply from beta");
@@ -116,7 +116,7 @@ public sealed class MachineNetworkTest : GameTest
             Assert.That(screen, Does.Contain("delta 10."));
 
             // Across the backbone to the other router's network, by name.
-            Type(a, "run examples/ping.wasm delta hi");
+            Type(a, "run examples/ping.bin delta hi");
         });
 
         await RunUntil(server, a, "reply from delta");
@@ -147,7 +147,7 @@ public sealed class MachineNetworkTest : GameTest
             var addrB = _machines.AddressOf(b);
             Assert.That(addrB, Is.Not.Null);
             Assert.That(addrB, Is.Not.EqualTo(firstB));
-            Type(a, "run examples/ping.wasm beta again");
+            Type(a, "run examples/ping.bin beta again");
         });
 
         await RunUntil(server, a, "reply from beta (" + Format(_machines.AddressOf(b)!.Value) + ") in");

@@ -1,0 +1,19 @@
+<Document>
+  # Assembly and the Kernel
+
+  Underneath Wire, programs are WebAssembly modules, and every computer can build them from WAT, WebAssembly's text form, the machine's assembly language. Programs written this way are tiny, and can do anything the kernel allows.
+
+  ## Writing WAT
+  - Write the module to a file ending in [mono].wat[/mono], with [mono]nano prog.wat[/mono].
+  - [mono]build prog.wat[/mono] builds [mono]prog.bin[/mono], or says what is wrong.
+  - [mono]run prog.bin[/mono] runs it.
+
+  A program exports its memory and a [mono]start[/mono] function, and may export [mono]tick[/mono] to be called 30 times a second. Every computer has [mono]keys.wat[/mono], a short example to read.
+
+  ## The kernel
+  Programs reach the machine through kernel functions, which they import from a versioned module such as [mono]sb_v8[/mono]. Each kernel version keeps every function from the versions before it, so old programs keep working. Most functions write their results into the program's memory and return a length, or a negative number when they fail.
+
+  Wire programs use the same functions; the Wire modules are a friendlier way to call them.
+
+  [mono]man wat[/mono] explains WAT on the computer, and [mono]man computer[/mono] lists every kernel function with what it returns.
+</Document>

@@ -1,0 +1,37 @@
+<Document>
+  # Programming in Wire
+
+  Wire is the language computers are programmed in. It looks like Python: blocks are indented, and there are whole numbers, text, lists, dicts, functions and loops. Mistakes are reported with their line, when the program is built or as it runs.
+
+  ## Writing a program
+  - [mono]new NAME[/mono] starts one from a template, and [mono]nano NAME.wire[/mono] edits it.
+  - [mono]build NAME.wire[/mono] checks it and builds [mono]NAME.bin[/mono].
+  - [mono]run NAME.bin[/mono] runs it.
+
+  The [mono]examples[/mono] folder on every computer has complete programs to read and copy, from a greeting to a network scanner and a calculator.
+
+  ## How a program runs
+  - The code at the top level, outside any function, runs once when the program starts.
+  - If the program defines a function named [mono]tick[/mono], the computer then calls it 30 times a second until the program calls [mono]sys.exit()[/mono]. Without one, the program ends once its top-level code has run.
+  - Each call gets a budget of about two million steps. A call that runs over, such as an endless loop, stops the program with an error.
+  - Names assigned at the top level are global: every function can read and change them.
+
+  ## The language
+  - Numbers are whole: [mono]7 / 2[/mono] is 3, and [mono]7 % 2[/mono] is 1.
+  - Text goes in quotes, and joins with [mono]+[/mono]: [mono]"hi " + name[/mono].
+  - Lists and dicts work as in Python, with methods like [mono]append[/mono], [mono]pop[/mono], [mono]split[/mono], [mono]join[/mono] and [mono]keys[/mono].
+  - [mono]if[/mono], [mono]elif[/mono], [mono]else[/mono], [mono]for[/mono], [mono]while[/mono], [mono]break[/mono], [mono]continue[/mono], [mono]def[/mono] and [mono]return[/mono] all work as you'd expect.
+  - [mono]print(a, b)[/mono] writes to the terminal.
+
+  [mono]man wire[/mono] on any computer is the full reference.
+
+  ## Modules
+  What a program can reach on its machine is in modules, called like [mono]fs.read("notes.txt")[/mono]:
+  - [bold]sys[/bold]: the program itself: its arguments, the clock, random numbers, starting and stopping other programs, building programs, and the manual.
+  - [bold]fs[/bold]: files on the disk.
+  - [bold]term[/bold]: the terminal: reading lines, raw key presses for full-screen programs, and clearing the screen.
+  - [bold]net[/bold]: sending and receiving packets, addresses and hostnames.
+  - [bold]ui[/bold]: a window of buttons, lists and drawings in place of the text. See [textlink="Program UIs" link="ProgramUis"].
+
+  [mono]man modules[/mono] lists every function. When a call fails, [mono]sys.error()[/mono] says why.
+</Document>

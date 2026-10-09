@@ -94,7 +94,7 @@ public sealed class NanoTest
         var editor = new Editor(_host, vm);
         editor.RunUntil("$ ");
         vm.TypeLine(command);
-        editor.RunUntil("CP nano 1.0");
+        editor.RunUntil("GL nano 1.0");
         return editor;
     }
 
@@ -223,7 +223,7 @@ public sealed class NanoTest
         Assert.That(nano.Screen.Split('\n'), Has.Length.EqualTo(24));
 
         nano.Keys(TerminalKeys.Ctrl('g'));
-        Assert.That(nano.Screen, Does.Contain("CP nano 1.0 help"));
+        Assert.That(nano.Screen, Does.Contain("GL nano 1.0 help"));
         nano.Keys('q');
         Assert.That(nano.Screen, Does.Contain("File: long.txt"));
         Assert.That(nano.File("long.txt"), Is.EqualTo(text));
@@ -233,12 +233,12 @@ public sealed class NanoTest
     public void ItWontEditAProgram()
     {
         var vm = new Vm();
-        vm.SeedFile("prog.wasm", [0, (byte) 'a', (byte) 's', (byte) 'm', 1, 0, 0, 0]);
+        vm.SeedFile("prog.bin", [0, (byte) 'a', (byte) 's', (byte) 'm', 1, 0, 0, 0]);
         vm.PowerOn(_host);
         using var editor = new Editor(_host, vm);
         editor.RunUntil("$ ");
-        vm.TypeLine("nano prog.wasm");
-        editor.RunUntil("nano: prog.wasm is a program, not text");
+        vm.TypeLine("nano prog.bin");
+        editor.RunUntil("nano: prog.bin is a program, not text");
         editor.RunUntil("$ ");
     }
 
@@ -256,8 +256,8 @@ public sealed class NanoTest
         vm.TypeLine("new mynano nano");
         editor.RunUntil("wrote mynano.wire, nano's source");
         vm.TypeLine("build mynano.wire");
-        editor.RunUntil("built mynano.wasm");
-        vm.TypeLine("run mynano.wasm notes.txt");
+        editor.RunUntil("built mynano.bin");
+        vm.TypeLine("run mynano.bin notes.txt");
         editor.RunUntil("File: notes.txt");
     }
 }

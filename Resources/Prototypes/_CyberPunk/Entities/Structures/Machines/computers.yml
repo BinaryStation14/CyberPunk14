@@ -2,19 +2,19 @@
   parent: BaseComputer
   id: ComputerProgrammable
   name: programmable computer
-  description: A general-purpose computer. It runs WebAssembly programs, and boots a small shell when it has power.
+  description: A general-purpose computer. It runs programs, and boots a small shell when it has power.
   components:
   - type: WasmMachine
     files:
       readme.txt: |
-        This computer runs WebAssembly programs, which you write in Wire
-        (`man wire`) or by hand in WAT (`man wat`).
+        This computer runs programs, which you write in Wire (`man wire`) or
+        by hand in its assembly language, WAT (`man wat`).
         Type `help` for the shell's commands, and `man` for the manual.
-        Try `new hello`, `build hello.wire` and `run hello.wasm` for your first
+        Try `new hello`, `build hello.wire` and `run hello.bin` for your first
         Wire program. The examples folder has more: `ls examples`, then `cat` one.
         The shell itself is a Wire program you can read and replace: `man boot`.
         `examples/calc.wire` is a calculator with its own buttons (`man ui`).
-        Try `build keys.wat` and `run keys.wasm` to see raw mode.
+        Try `build keys.wat` and `run keys.bin` to see raw mode.
         Data cable to a powered router networks it: `ip` shows its address,
         `hostname NAME` names it, and `hosts` lists every name the router knows.
       hello.wat: (module (import "sb_v6" "term_write" (func $write (param i32 i32))) (memory (export "memory") 1) (data (i32.const 0) "Hello from a program!\n") (func (export "start") (call $write (i32.const 0) (i32.const 22))))
@@ -57,7 +57,7 @@
       examples/hello.wire: |
         # hello.wire: prints a greeting and what is on the disk.
         #     build examples/hello.wire
-        #     run examples/hello.wasm
+        #     run examples/hello.bin
 
         print("Hello from a Wire program!")
         print("This computer has been up for", sys.clock(), "ms.")
@@ -65,7 +65,7 @@
       examples/spin.wire: |
         # spin.wire: a badly behaved program, an endless loop. The machine's fuel
         # budget stops it on its first go, and everything else carries on.
-        #     run examples/spin.wasm
+        #     run examples/spin.bin
 
         print("Spinning forever...")
         n = 0
@@ -76,7 +76,7 @@
         # computer's port 7 with the same text, and shows what it got. Type quit
         # to stop it. Try it with ping from another computer, by this one's
         # address or by its name (hostname NAME sets one).
-        #     run examples/echo_server.wasm
+        #     run examples/echo_server.bin
 
         ECHO = 7
 
@@ -103,7 +103,7 @@
       examples/ping.wire: |
         # ping.wire: sends a message to the echo server (port 7) at an address or
         # hostname and waits up to three seconds for it to come back.
-        #     run examples/ping.wasm HOST [MESSAGE]
+        #     run examples/ping.bin HOST [MESSAGE]
 
         ECHO = 7
         TIMEOUT = 3000
@@ -113,7 +113,7 @@
         sent = 0
         words = sys.args().split()
         if len(words) == 0:
-            print("usage: run ping.wasm HOST [MESSAGE]   (an address or a hostname)")
+            print("usage: run ping.bin HOST [MESSAGE]   (an address or a hostname)")
             sys.exit(1)
         else:
             target = words.pop(0)
@@ -149,8 +149,8 @@
         # none; the stock door firmware also takes close, bolt, unbolt and status
         # (man firmware).
         # Find the building's door controllers with netscan.
-        #     run examples/opendoor.wasm HOST [COMMAND]
-        #     run examples/opendoor.wasm 10.4.1.3 open
+        #     run examples/opendoor.bin HOST [COMMAND]
+        #     run examples/opendoor.bin 10.4.1.3 open
 
         DOOR = 1701
         TIMEOUT = 3000
@@ -160,7 +160,7 @@
         sent = 0
         words = sys.args().split()
         if len(words) == 0:
-            print("usage: run opendoor.wasm HOST [COMMAND]   (man firmware)")
+            print("usage: run opendoor.bin HOST [COMMAND]   (man firmware)")
             sys.exit(1)
         else:
             target = words[0]
@@ -188,7 +188,7 @@
         # asks each whether it is a door controller (port 1701) or a camera (port
         # 1702), and shows what answers within a second, with the hostnames the
         # router knows.
-        #     run examples/netscan.wasm
+        #     run examples/netscan.bin
 
         DOOR = 1701
         CAMERA = 1702
@@ -239,7 +239,7 @@
         # own UI (man ui). The terminal window shows the buttons in place of the
         # text while it runs. Wire numbers are whole numbers, so 7 / 2 is 3.
         #     build examples/calc.wire
-        #     run examples/calc.wasm
+        #     run examples/calc.bin
 
         # The buttons, a row at a time: each is [id, text]. Ids are what come
         # back in events when the button is clicked.
@@ -327,6 +327,9 @@
       data:
         !type:CableDeviceNode
         nodeGroupID: Data
+  - type: GuideHelp
+    guides:
+    - Computers
   - type: ActivatableUI
     key: enum.MachineTerminalUiKey.Key
   - type: UserInterface

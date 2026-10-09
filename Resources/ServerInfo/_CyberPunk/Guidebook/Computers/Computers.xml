@@ -1,0 +1,41 @@
+<Document>
+  # Computers
+
+  Programmable computers run programs that the crew write themselves. Anyone can walk up to one, read its manual, write a program and run it, whether that's a calculator, a network scanner or a whole new operating system.
+
+  <Box>
+    <GuideEntityEmbed Entity="ComputerProgrammable"/>
+  </Box>
+
+  ## Getting started
+  - Give the computer power. It boots its operating system, [bold]Gridline OS 4.2[/bold], and waits at a prompt.
+  - Click the computer to open its terminal. Type a command and press [bold]Enter[/bold]. Everyone at the same computer sees the same screen.
+  - Type [mono]help[/mono] for the shell's commands, and [mono]man[/mono] for the manual. The manual is on every computer and goes into more detail than these pages.
+  - Every computer comes with a [mono]readme.txt[/mono] and an [mono]examples[/mono] folder: try [mono]cat readme.txt[/mono] and [mono]ls examples[/mono].
+
+  ## Your first program
+  - [mono]new hello[/mono] writes a starting program, [mono]hello.wire[/mono].
+  - [mono]build hello.wire[/mono] turns it into a program, [mono]hello.bin[/mono].
+  - [mono]run hello.bin[/mono] runs it.
+
+  Programs are written in [textlink="Wire" link="WireProgramming"], a small language that looks like Python. Edit them on the computer with [mono]nano FILE[/mono].
+
+  ## The disk
+  Each computer has its own disk of 1 MiB and up to 64 files. Files survive power cuts and go wherever the computer goes. File names can include folders, like [mono]examples/hello.wire[/mono].
+
+  ## Under the hood
+  Compiled programs, the [mono].bin[/mono] files, are WebAssembly modules. The server runs each one in a sandbox:
+  - every call into a program has a budget of about two million instructions, and a program that runs over is stopped;
+  - a program's memory is capped at 8 MiB;
+  - all computers together share a small slice of each server tick, so no number of busy computers can slow the game down.
+
+  A misbehaving program only ever hurts itself: an endless loop is stopped on its first go, and everything else carries on.
+
+  ## More
+  - [textlink="The Shell" link="ComputerShell"]: every command, files, jobs and the manual.
+  - [textlink="Programming in Wire" link="WireProgramming"]: the language and what it can reach.
+  - [textlink="Program UIs" link="ProgramUis"]: programs with buttons, lists and drawings.
+  - [textlink="Computer Networks" link="ComputerNetworks"]: data cable, switches, routers and hostnames.
+  - [textlink="Custom Operating Systems" link="CustomOperatingSystems"]: replacing the OS itself.
+  - [textlink="Assembly and the Kernel" link="ComputerAssembly"]: programs written by hand, and the functions underneath.
+</Document>
