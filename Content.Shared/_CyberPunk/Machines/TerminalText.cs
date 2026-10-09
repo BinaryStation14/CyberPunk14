@@ -34,7 +34,10 @@ public static class TerminalText
                     break;
                 case Backspace:
                     if (builder.Length > 0 && builder[^1] != '\n')
-                        builder.Length -= builder.Length > 1 && char.IsLowSurrogate(builder[^1]) ? 2 : 1;
+                    {
+                        var width = builder.Length > 1 && char.IsLowSurrogate(builder[^1]) ? 2 : 1;
+                        builder.Remove(builder.Length - width, width);
+                    }
                     break;
                 default:
                     builder.Append(c);
