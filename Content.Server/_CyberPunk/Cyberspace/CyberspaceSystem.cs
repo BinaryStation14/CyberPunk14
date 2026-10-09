@@ -79,6 +79,8 @@ public sealed partial class CyberspaceSystem : EntitySystem
         [CyberNodeKind.DoorController] = "CyberNodeDoorController",
         [CyberNodeKind.Camera] = "CyberNodeCamera",
         [CyberNodeKind.Device] = "CyberNodeDevice",
+        [CyberNodeKind.AccessPoint] = "CyberNodeAccessPoint",
+        [CyberNodeKind.Deck] = "CyberNodeDeck",
     };
 
     private sealed class Region
@@ -117,6 +119,7 @@ public sealed partial class CyberspaceSystem : EntitySystem
         base.Initialize();
         SubscribeLocalEvent<MachineNetworksRebuiltEvent>(OnNetworksRebuilt);
         SubscribeLocalEvent<RoundRestartCleanupEvent>(OnRoundRestart);
+        InitializeRunners();
     }
 
     private void OnRoundRestart(RoundRestartCleanupEvent ev)
@@ -135,6 +138,8 @@ public sealed partial class CyberspaceSystem : EntitySystem
         _regions = Array.Empty<Region>();
         _barriers.Clear();
         _dirtyChunks.Clear();
+        _spurs.Clear();
+        Array.Clear(_sandboxes);
     }
 
     /// <summary>
@@ -191,6 +196,19 @@ public sealed partial class CyberspaceSystem : EntitySystem
         }
 
         Rebuild(ev.Networks);
+        NameDecks();
+    }
+
+    /// <summary>
+    /// Makes cyberspace if there's none yet, as for a practice grid before any network is up.
+    /// </summary>
+    private void EnsureCreated()
+    {
+        if (_mapUid is { } existing && TerminatingOrDeleted(existing))
+            Reset();
+
+        if (_mapUid == null)
+            Create(new List<MachineNetwork>());
     }
 
     /// <summary>
@@ -199,7 +217,7 @@ public sealed partial class CyberspaceSystem : EntitySystem
     private void Create(List<MachineNetwork> networks)
     {
         var regions = Math.Max(networks.Count + SpareRegions, MinRegions);
-        var hosts = Math.Max(networks.Max(n => n.Hosts.Count) + 3, MinHosts);
+        var hosts = Math.Max(networks.Select(n => n.Hosts.Count).DefaultIfEmpty(0).Max() + 3, MinHosts);
         var layout = new CyberLayout(regions, hosts, Sandboxes);
         _layout = layout;
         _seed = (ulong) (uint) _random.Next() << 32 | (uint) _random.Next();
@@ -356,6 +374,9 @@ public sealed partial class CyberspaceSystem : EntitySystem
             region.Pads = machines;
             var seed = new CyberRng(_seed ^ unchecked((ulong) r * 0x9E3779B97F4A7C15)).NextU64();
             Paint(layout.RegionRect(r), CyberRegionGenerator.Generate(seed, layout, graph));
+            SyncNodes(layout, r, network, pads);
+            RestampSpurs(r);
+            return;
         }
 
         SyncNodes(layout, r, network, pads);
@@ -494,6 +515,9 @@ public sealed partial class CyberspaceSystem : EntitySystem
 
     private CyberNodeKind HostKind(EntityUid machine)
     {
+        if (HasComp<AccessPointComponent>(machine))
+            return CyberNodeKind.AccessPoint;
+
         if (!TryComp<WasmMachineComponent>(machine, out var comp))
             return CyberNodeKind.Device;
 
@@ -515,6 +539,8 @@ public sealed partial class CyberspaceSystem : EntitySystem
             CyberNodeKind.Computer => "computer",
             CyberNodeKind.DoorController => "door controller",
             CyberNodeKind.Camera => "camera",
+            CyberNodeKind.AccessPoint => "access point",
+            CyberNodeKind.Deck => "deck",
             _ => "device",
         };
     }

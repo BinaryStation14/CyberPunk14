@@ -2,3 +2,30 @@ tiles-cyber-data = data path
 tiles-cyber-node = node pad
 tiles-cyber-bus = data bus
 tiles-cyber-static = static
+
+cyberspace-beyond-deck = {CAPITALIZE(THE($device))} is beyond your deck: it needs to see it, within 8 tiles.
+cyberspace-no-signal = {CAPITALIZE(THE($device))} has no signal: it isn't on a working network.
+cyberspace-device-dead = {CAPITALIZE(THE($device))} is dead.
+cyberspace-already-jacked-in = You're already jacked in.
+cyberspace-dumpshocked = Your head is still ringing from the dumpshock. Give it {$seconds} more {$seconds ->
+    [one] second
+   *[other] seconds
+}.
+cyberspace-no-mind = There's nobody in there to jack in.
+cyberspace-practice-full = The practice grid is full right now. Try again soon.
+cyberspace-practice-failed = The deck can't raise a practice grid.
+
+cyberspace-jack-in = You jack the deck into {THE($device)}. The world falls away into light.
+cyberspace-jack-in-others = {CAPITALIZE(THE($user))} jacks a cyberdeck into {THE($device)} and goes still.
+cyberspace-jack-in-remote = Your deck reaches into {THE($device)} through the air, and its network opens. The world falls away into light.
+cyberspace-jack-in-remote-others = {CAPITALIZE(THE($user))} points a cyberdeck at {THE($device)} and goes still.
+cyberspace-jack-in-practice = You jack into your deck's practice grid. The room falls away into light.
+cyberspace-jack-in-practice-others = {CAPITALIZE(THE($user))} jacks into a cyberdeck and goes still.
+
+cyberspace-jack-out = You jack out. The world comes back.
+cyberspace-lost-connection = You lose the connection.
+cyberspace-deck-torn = Your deck is torn from your hands! You slam back into your body.
+cyberspace-lost-device = The machine you're jacked into drops out from under you. Dumpshock!
+cyberspace-lost-remote = You lose the machine you were hacking, and the network with it. Dumpshock!
+cyberspace-path-dissolves = The path dissolves under you, and you with it. Dumpshock!
+cyberspace-body-down = Your body hits the floor and the connection goes with it. Dumpshock!

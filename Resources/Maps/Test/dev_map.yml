@@ -5,7 +5,7 @@ meta:
   forkId: ""
   forkVersion: ""
   time: 08/23/2026 10:22:08
-  entityCount: 3827
+  entityCount: 3829
 maps:
 - 23
 grids:
@@ -1162,6 +1162,13 @@ entities:
       chunkHistory: {}
     - type: ChunkContainer
       chunkEntities: []
+- proto: AccessPoint
+  entities:
+  - uid: 3828
+    components:
+    - type: Transform
+      parent: 1
+      pos: 20.5,62.5
 - proto: AirAlarm
   entities:
   - uid: 1270
@@ -13657,6 +13664,13 @@ entities:
       - Arsenal
       - Experimental
       - CivilianServices
+- proto: Cyberdeck
+  entities:
+  - uid: 3829
+    components:
+    - type: Transform
+      parent: 1
+      pos: 20.5,60.5
 - proto: DebugGenerator
   entities:
   - uid: 2256

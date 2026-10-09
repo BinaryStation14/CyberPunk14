@@ -1,0 +1,65 @@
+namespace Content.Server._CyberPunk.Cyberspace;
+
+/// <summary>
+/// A netrunner's deck: used on a networked machine it jacks its holder into cyberspace, and used in the hand it
+/// opens a practice grid.
+/// </summary>
+[RegisterComponent, Access(typeof(CyberspaceSystem))]
+public sealed partial class CyberdeckComponent : Component;
+
+/// <summary>
+/// A network port in the wall, the usual way into cyberspace. On data cable it joins the network like a machine
+/// with a UI.
+/// </summary>
+[RegisterComponent]
+public sealed partial class AccessPointComponent : Component;
+
+/// <summary>
+/// Someone who has jacked in: their virtual body, whether they're in it now and how, and their dumpshock.
+/// </summary>
+[RegisterComponent, Access(typeof(CyberspaceSystem))]
+public sealed partial class NetrunnerComponent : Component
+{
+    /// <summary>
+    /// Their virtual body, made on their first jack-in and kept, with its deck's disk, between runs.
+    /// </summary>
+    [ViewVariables]
+    public EntityUid? Avatar;
+
+    /// <summary>
+    /// When they can jack in again after being thrown out.
+    /// </summary>
+    [ViewVariables]
+    public TimeSpan DumpshockUntil;
+
+    /// <summary>
+    /// How they're jacked in, while they are.
+    /// </summary>
+    [ViewVariables]
+    public JackIn? JackedIn;
+}
+
+/// <summary>
+/// How a runner is jacked in: the deck in their hands, and the machine they came in through (plugged in beside
+/// it, or through the air) or the practice grid they raised.
+/// </summary>
+public sealed record JackIn(EntityUid Deck, EntityUid? Device, bool Remote, int? Practice);
+
+/// <summary>
+/// A runner's virtual body in cyberspace. It's a computer, of kind Deck.
+/// </summary>
+[RegisterComponent, Access(typeof(CyberspaceSystem))]
+public sealed partial class CyberAvatarComponent : Component
+{
+    /// <summary>
+    /// The body whose mind walks it.
+    /// </summary>
+    [ViewVariables]
+    public EntityUid Body;
+
+    [ViewVariables]
+    public EntityUid? JackOutAction;
+
+    [ViewVariables]
+    public EntityUid? OpenDeckAction;
+}

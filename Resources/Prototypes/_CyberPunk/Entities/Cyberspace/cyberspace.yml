@@ -85,3 +85,155 @@
   components:
   - type: Sprite
     color: "#999999"
+
+- type: entity
+  parent: CyberNodeBase
+  id: CyberNodeAccessPoint
+  categories: [ HideSpawnMenu ]
+  components:
+  - type: Sprite
+    color: "#738CFF"
+
+- type: entity
+  parent: CyberNodeBase
+  id: CyberNodeDeck
+  categories: [ HideSpawnMenu ]
+  description: A runner's deck, on the network it came in through.
+  components:
+  - type: Sprite
+    state: triangle
+    color: "#FFF24D"
+
+# A runner's virtual body: their mind walks it while their real body stays behind. It's a computer, their deck.
+- type: entity
+  parent: BaseMob
+  id: CyberAvatar
+  name: runner
+  description: Someone's mind, walking the network.
+  categories: [ HideSpawnMenu ]
+  components:
+  - type: Sprite
+    sprite: _CyberPunk/Cyberspace/node.rsi
+    state: runner
+    color: "#4DD9FF"
+  - type: CyberAvatar
+  - type: WasmMachine
+    kind: Deck
+    files:
+      readme.txt: |
+        YOUR DECK
+
+        This is your deck: your virtual body is a computer, and this is its disk.
+        It keeps its files between runs, and its programs reach whatever network
+        you jacked into (ip shows your address on it).
+
+        Walk the paths to find the machines on the network: each has a node on
+        its pad, and the router's pad opens onto the bus that joins every
+        network to the backbone.
+
+        Jack out from the action bar, and open this terminal again from there.
+        Lose your deck, your body or your way, and you're thrown out with
+        dumpshock: ten seconds before you can jack in again.
+  - type: UserInterface
+    interfaces:
+      enum.MachineTerminalUiKey.Key:
+        type: MachineTerminalBoundUserInterface
+
+# The computer of a practice grid, on nobody's network but the grid's.
+- type: entity
+  id: CyberTrainingServer
+  name: training server
+  categories: [ HideSpawnMenu ]
+  components:
+  - type: WasmMachine
+    files:
+      readme.txt: |
+        TRAINING SERVER
+
+        A practice network's server: nobody else's, and nobody else's ICE.
+        Your deck reaches it, and it reaches your deck. Out in the city, every
+        network has a router, and its pad opens onto the bus to the others.
+  - type: UserInterface
+    interfaces:
+      enum.MachineTerminalUiKey.Key:
+        type: MachineTerminalBoundUserInterface
+
+- type: entity
+  parent: BaseItem
+  id: Cyberdeck
+  name: cyberdeck
+  description: A netrunner's deck. Use it on a networked machine to jack into cyberspace, or in your hand to practise on a network of your own; your body stays behind.
+  components:
+  - type: Sprite
+    sprite: Objects/Devices/tablets.rsi
+    state: syndie
+  - type: Item
+    size: Small
+    inhandVisuals:
+      left:
+      - state: inhand-left-syndie
+      right:
+      - state: inhand-right-syndie
+  - type: Cyberdeck
+  - type: GuideHelp
+    guides:
+    - Cyberspace
+
+- type: entity
+  parent: [ BaseWallmountMetallic, BaseWallmountMachine, StructureHealthMachineWeak ]
+  id: AccessPoint
+  name: access point
+  description: A network port in the wall. Use a cyberdeck on it to jack into cyberspace; on data cable to a powered router, it's on that router's network.
+  components:
+  - type: AccessPoint
+  - type: ApcPowerReceiver
+    powerLoad: 30
+  - type: Sprite
+    sprite: Structures/Wallmounts/station-map.rsi
+    offset: 0, -0.25
+    color: "#80E5FF"
+    layers:
+    - state: base
+    - state: unshaded
+      shader: unshaded
+      map: [ "enum.PowerDeviceVisualLayers.Powered" ]
+  - type: Appearance
+  - type: GenericVisualizer
+    visuals:
+      enum.PowerDeviceVisuals.Powered:
+        enum.PowerDeviceVisualLayers.Powered:
+          True: { visible: true }
+          False: { visible: false }
+  - type: GuideHelp
+    guides:
+    - Cyberspace
+
+- type: entity
+  parent: BaseAction
+  id: ActionCyberJackOut
+  name: Jack out
+  description: Leave cyberspace and go back to your body.
+  components:
+  - type: Action
+    checkCanInteract: false
+  - type: Sprite
+    sprite: Interface/Actions/actions_ai.rsi
+    layers:
+    - state: emergency_off
+  - type: InstantAction
+    event: !type:CyberJackOutActionEvent
+
+- type: entity
+  parent: BaseAction
+  id: ActionCyberOpenDeck
+  name: Open deck
+  description: Open your deck's terminal.
+  components:
+  - type: Action
+    checkCanInteract: false
+  - type: Sprite
+    sprite: Interface/Actions/actions_ai.rsi
+    layers:
+    - state: comms_console
+  - type: InstantAction
+    event: !type:CyberOpenDeckActionEvent

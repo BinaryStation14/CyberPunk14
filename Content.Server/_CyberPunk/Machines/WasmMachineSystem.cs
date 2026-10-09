@@ -131,6 +131,26 @@ public sealed partial class WasmMachineSystem : EntitySystem
     }
 
     /// <summary>
+    /// Switches on or off a machine that has no power supply, like a deck when its runner jacks in or out. What's
+    /// on its disk stays.
+    /// </summary>
+    public void SetRunning(Entity<WasmMachineComponent> ent, bool on)
+    {
+        if (ent.Comp.Vm is not { } vm)
+            return;
+
+        if (on && vm.State == VmState.Off)
+        {
+            PowerOn(ent);
+        }
+        else if (!on && vm.State != VmState.Off)
+        {
+            vm.PowerOff();
+            CollectOutput(ent);
+        }
+    }
+
+    /// <summary>
     /// Types a line at a machine's terminal, for the program in front to read.
     /// </summary>
     public void TypeLine(Entity<WasmMachineComponent> ent, string line)

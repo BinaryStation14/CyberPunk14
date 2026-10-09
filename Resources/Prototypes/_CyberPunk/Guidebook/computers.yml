@@ -8,6 +8,7 @@
   - WireProgramming
   - ProgramUis
   - ComputerNetworks
+  - Cyberspace
   - CustomOperatingSystems
   - ComputerAssembly
 
@@ -40,3 +41,8 @@
   id: ComputerAssembly
   name: guide-entry-computer-assembly
   text: "/ServerInfo/_CyberPunk/Guidebook/Computers/Assembly.xml"
+
+- type: guideEntry
+  id: Cyberspace
+  name: guide-entry-cyberspace
+  text: "/ServerInfo/_CyberPunk/Guidebook/Computers/Cyberspace.xml"
