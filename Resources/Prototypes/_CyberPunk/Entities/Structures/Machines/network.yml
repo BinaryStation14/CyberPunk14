@@ -10,11 +10,11 @@
     drawdepth: ThinWire
     visible: false
     color: Cyan
-    sprite: Structures/Power/Cables/lv_cable.rsi
-    state: lvcable_0
+    sprite: _CyberPunk/Structures/Power/Cables/data_cable.rsi
+    state: datacable_0
   - type: Icon
-    sprite: Structures/Power/Cables/lv_cable.rsi
-    state: lvcable_4
+    sprite: _CyberPunk/Structures/Power/Cables/data_cable.rsi
+    state: datacable_4
   - type: Damageable
     damageModifierSet: RodMetalMod
   - type: Destructible
@@ -43,7 +43,7 @@
   - type: CableVis
     node: data
   - type: CableVisualizer
-    statePrefix: lvcable_
+    statePrefix: datacable_
   - type: RCDDeconstructable
     cost: 2
     delay: 0
