@@ -343,7 +343,8 @@ public sealed class CyberspaceTest : GameTest
 
     /// <summary>
     /// A runner uses a computer's node and its terminal opens, and stays open though the computer is on another
-    /// map. A locked computer opens once they've stood at its node long enough to breach it. Jacking out closes
+    /// map. A locked computer, or another runner's deck, opens once they've stood at its node long enough to
+    /// breach it. Jacking out closes
     /// them, and the computer gets its range back.
     /// </summary>
     [Test]
@@ -362,6 +363,7 @@ public sealed class CyberspaceTest : GameTest
         var access = _entMan.System<AccessReaderSystem>();
 
         EntityUid computer = default, locked = default, accessPoint = default, runner = default, deck = default;
+        EntityUid rival = default, rivalDeck = default;
         await server.WaitAssertion(() =>
         {
             mapSys.CreateMap(out var mapId);
@@ -389,11 +391,12 @@ public sealed class CyberspaceTest : GameTest
             access.TryAddAccess((locked, reader), "Captain");
 
             (runner, deck) = Runner(minds, hands, godmode, 3, 1);
+            (rival, rivalDeck) = Runner(minds, hands, godmode, 4, 1);
         });
 
         await server.WaitRunTicks(30);
 
-        EntityUid avatar = default;
+        EntityUid avatar = default, rivalAvatar = default;
         float range = default;
         await server.WaitAssertion(() =>
         {
@@ -416,12 +419,23 @@ public sealed class CyberspaceTest : GameTest
             Stand(avatar, cyberspace.NodeOf(locked)!.Value);
             interaction.InteractionActivate(avatar, cyberspace.NodeOf(locked)!.Value);
             Assert.That(ui.IsUiOpen(locked, MachineTerminalUiKey.Key, avatar), Is.False, "it's locked");
+
+            // Another runner's deck is always locked.
+            Assert.That(cyberspace.TryJackIn(rival, rivalDeck, accessPoint, true));
+            Assert.That(cyberspace.IsJackedIn(rival, out var r));
+            rivalAvatar = r!.Value;
+            Stand(rivalAvatar, cyberspace.NodeOf(avatar)!.Value);
+            interaction.InteractionActivate(rivalAvatar, cyberspace.NodeOf(avatar)!.Value);
+            Assert.That(ui.IsUiOpen(avatar, MachineTerminalUiKey.Key, rivalAvatar), Is.False, "another runner's deck is locked");
         });
 
         await server.WaitRunTicks(250);
         await server.WaitAssertion(() =>
         {
             Assert.That(ui.IsUiOpen(locked, MachineTerminalUiKey.Key, avatar), "breached, it opens");
+            Assert.That(ui.IsUiOpen(avatar, MachineTerminalUiKey.Key, rivalAvatar), "breached, the deck opens");
+
+            cyberspace.JackOut(rival, "", false);
 
             cyberspace.JackOut(runner, "", false);
         });
