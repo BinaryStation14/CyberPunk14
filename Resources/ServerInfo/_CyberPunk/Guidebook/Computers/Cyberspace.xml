@@ -16,6 +16,9 @@
   ## Your deck
   Your virtual body is a computer, your deck, with an address on the network you came in through ([mono]ip[/mono] shows it). Its disk keeps its files between runs. Open its terminal from the action bar.
 
+  ## Using machines
+  Use a machine's node to open it, as if you stood at the machine itself: a computer's terminal, a vending machine's stock, an air alarm's settings. You carry your real body's access. A machine your ID doesn't open is locked: stand at its node for three seconds to [bold]breach[/bold] it, and it stays breached until you jack out. Walk away from the node and the machine closes.
+
   ## Jacking out
   Jack out from the action bar at any time, at no cost. You're thrown out with [bold]dumpshock[/bold], ten seconds before you can jack in again, if:
   - the deck leaves your hands;

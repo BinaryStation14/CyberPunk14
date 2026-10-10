@@ -121,6 +121,7 @@ public sealed partial class CyberspaceSystem : EntitySystem
         SubscribeLocalEvent<MachineNetworksRebuiltEvent>(OnNetworksRebuilt);
         SubscribeLocalEvent<RoundRestartCleanupEvent>(OnRoundRestart);
         InitializeRunners();
+        InitializeNodes();
     }
 
     private void OnRoundRestart(RoundRestartCleanupEvent ev)
