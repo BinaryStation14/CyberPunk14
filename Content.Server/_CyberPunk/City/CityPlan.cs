@@ -88,6 +88,27 @@ public enum CityStructure : byte
     /// <summary>The wall round the edge of the map that nobody gets past.</summary>
     BoundaryWall,
     Fence,
+    /// <summary>A battery bank storing high-voltage power.</summary>
+    Smes,
+    /// <summary>Steps high-voltage power down to medium voltage for a block.</summary>
+    Substation,
+}
+
+/// <summary>The cables under a tile, by voltage.</summary>
+[Flags]
+public enum CityCable : byte
+{
+    None = 0,
+    High = 1,
+    Medium = 2,
+    Low = 4,
+}
+
+/// <summary>Power fittings that face a way: a wall-mounted APC, or a cable terminal feeding an SMES.</summary>
+public enum CityFixture : byte
+{
+    Apc,
+    Terminal,
 }
 
 /// <summary>
@@ -100,6 +121,7 @@ public sealed class CityPlan
     public readonly int Size;
     public readonly CityFloor[] Floors;
     public readonly CityStructure[] Structures;
+    public readonly CityCable[] Cables;
 
     /// <summary>Each district's zone, row by row from the bottom.</summary>
     public readonly CityZone[] Zones;
@@ -110,12 +132,16 @@ public sealed class CityPlan
     /// <summary>Where each landmark stands, as its bottom-left tile and size.</summary>
     public readonly List<(CityLandmark Kind, int X, int Y, int W, int H)> Landmarks = new();
 
+    /// <summary>Power fittings, each with the direction it faces as an index into the WFC directions.</summary>
+    public readonly List<(CityFixture Kind, int X, int Y, int Direction)> Fixtures = new();
+
     public CityPlan(int districts)
     {
         Districts = districts;
         Size = districts * CityGenerator.Pitch + CityGenerator.Avenue;
         Floors = new CityFloor[Size * Size];
         Structures = new CityStructure[Size * Size];
+        Cables = new CityCable[Size * Size];
         Zones = new CityZone[districts * districts];
     }
 
@@ -143,6 +169,16 @@ public sealed class CityPlan
     public void SetStructure(int x, int y, CityStructure structure)
     {
         Structures[y * Size + x] = structure;
+    }
+
+    public CityCable Cable(int x, int y)
+    {
+        return Cables[y * Size + x];
+    }
+
+    public void AddCable(int x, int y, CityCable cable)
+    {
+        Cables[y * Size + x] |= cable;
     }
 
     public CityZone Zone(int dx, int dy)

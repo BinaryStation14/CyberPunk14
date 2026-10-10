@@ -423,9 +423,10 @@ public static partial class CityGenerator
 
     /// <summary>
     /// The solar plant over its districts: rows of panels on concrete either side of a cross of service roads,
-    /// a substation by the crossroads, and a fence round it all with a gate where each road leaves.
+    /// a hall of SMES units by the crossroads, and a fence round it all with a gate where each road leaves.
     /// </summary>
-    private static void PaintSolarPlant(CityPlan plan, (int X, int Y, int W, int H) districts)
+    /// <returns>The terminals feeding the SMES units, and the cable carrying their output out of the plant.</returns>
+    private static SolarBank PaintSolarPlant(CityPlan plan, (int X, int Y, int W, int H) districts)
     {
         var (ox, oy) = (Origin(districts.X), Origin(districts.Y));
         var (w, h) = (districts.W * Pitch - Avenue, districts.H * Pitch - Avenue);
@@ -456,6 +457,35 @@ public static partial class CityGenerator
         plan.SetStructure(ox + mx - 2, oy + my - 2, CityStructure.Lamp);
         plan.SetStructure(ox + mx + 2, oy + my - 2, CityStructure.Lamp);
         plan.Landmarks.Add((CityLandmark.SolarPlant, ox, oy, w, h));
+
+        // A row of SMES units across the hall, each charged through a terminal on its south side. Their outputs
+        // join under the row and leave by the west door, the row being level with it, then run up the service
+        // road to the edge of the plant.
+        var (ix, iy) = (ox + sx + 1, oy + sy + 1);
+        var bank = new SolarBank(new List<(int, int)>(), new List<(int, int)>());
+        for (var x = ix + 2; x <= ix + 7; x++)
+        {
+            plan.SetStructure(x, iy + 3, CityStructure.Smes);
+            plan.Fixtures.Add((CityFixture.Terminal, x, iy + 2, 0));
+            bank.Terminals.Add((x, iy + 2));
+        }
+
+        for (var x = ix + 7; x >= ox + mx; x--)
+        {
+            bank.Outputs.Add((x, iy + 3));
+        }
+
+        for (var y = iy + 4; y < oy + h; y++)
+        {
+            bank.Outputs.Add((ox + mx, y));
+        }
+
+        foreach (var (x, y) in bank.Outputs)
+        {
+            plan.AddCable(x, y, CityCable.High);
+        }
+
+        return bank;
     }
 
     /// <summary>

@@ -29,6 +29,10 @@ namespace Content.Server._CyberPunk.City;
 /// runs round the city a little way in from the edge, with a checkpoint wherever a highway crosses it, and an
 /// indestructible wall closes off the edge itself.
 /// </para>
+/// <para>
+/// Last, the city is wired from the solar plant: high-voltage cable under the sidewalks to a substation by every
+/// block, medium-voltage cable on to an APC in every building, and low-voltage cable round its rooms.
+/// </para>
 /// </remarks>
 public static partial class CityGenerator
 {
@@ -320,11 +324,14 @@ public static partial class CityGenerator
         }
 
         var districtRng = rng.Fork(4);
+        var regions = new List<Region>();
         foreach (var (dx, dy, w, h) in Blocks(plan, lone, rng.Fork(5)))
         {
             var zoneRng = districtRng.Fork((ulong) (dy * districts + dx));
             var (ox, oy) = (Origin(dx), Origin(dy));
             var zone = plan.Zone(dx, dy);
+            if (IsBuiltUp(zone))
+                regions.Add(new Region(ox, oy, w * Pitch - Avenue, h * Pitch - Avenue, Affluent.Contains(zone)));
             if ((dx, dy) == centre)
                 PaintHeadquarters(plan, ox, oy, zoneRng);
             else if ((dx, dy) == civic)
@@ -346,14 +353,24 @@ public static partial class CityGenerator
                 PaintRuin(plan, ox, oy, zoneRng);
         }
 
-        PaintSolarPlant(plan, solar);
+        var bank = PaintSolarPlant(plan, solar);
         PaintTownships(plan, roads, rng.Fork(7));
         PaintBunkers(plan, rng.Fork(6));
-        PaintBorder(plan);
+        foreach (var (x, y, w, h) in PaintBorder(plan))
+        {
+            regions.Add(new Region(x, y, w, h, false));
+        }
+
+        foreach (var (kind, x, y, w, h) in plan.Landmarks)
+        {
+            if (kind is CityLandmark.Township or CityLandmark.SolarPlant)
+                regions.Add(new Region(x, y, w, h, false));
+        }
 
         var (cx, cy) = shape.Centre;
         plan.Spawn = (cx * Pitch + Avenue / 2, cy * Pitch + Avenue / 2);
         DigTunnels(plan);
+        Wire(plan, bank, regions);
         return plan;
     }
 
@@ -1028,7 +1045,8 @@ public static partial class CityGenerator
     /// The edge of the map: a fence round the city with a checkpoint wherever a highway crosses it, and beyond
     /// that the boundary wall. The fence runs over land only, so it ends at the sea and gaps where mountains stand.
     /// </summary>
-    private static void PaintBorder(CityPlan plan)
+    /// <returns>The checkpoints, as their bottom-left tile and size.</returns>
+    private static List<(int X, int Y, int W, int H)> PaintBorder(CityPlan plan)
     {
         var (near, far) = (FenceInset, plan.Size - 1 - FenceInset);
         var ring = new List<(int X, int Y)>();
@@ -1070,11 +1088,13 @@ public static partial class CityGenerator
                 plan.Set(x, y, plan.Floor(x, y), CityStructure.Fence);
         }
 
+        var areas = new List<(int X, int Y, int W, int H)>();
         foreach (var (x, y, vertical) in checkpoints)
         {
             // Towards the middle of the map, so the booths' doors face the city.
             var inward = (vertical ? y : x) < plan.Size / 2 ? 1 : -1;
             PaintCheckpoint(plan, x, y, vertical, inward);
+            areas.Add(vertical ? (x - 9, y - 3, 19, 7) : (x - 3, y - 9, 7, 19));
         }
 
         for (var y = 0; y < plan.Size; y++)
@@ -1085,6 +1105,8 @@ public static partial class CityGenerator
                     plan.SetStructure(x, y, CityStructure.BoundaryWall);
             }
         }
+
+        return areas;
     }
 
     /// <summary>How many tiles of asphalt run from a tile in a direction.</summary>

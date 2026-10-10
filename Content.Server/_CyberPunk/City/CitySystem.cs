@@ -19,8 +19,8 @@ namespace Content.Server._CyberPunk.City;
 /// <summary>
 /// The generated city: one map, made from a <see cref="CityPlan"/> the first time a player steps through a
 /// <see cref="CityPortalComponent"/>, with a gateway back by where they arrive. The sea is walled off by
-/// invisible barriers. The tiles are laid at once; the walls, rocks and everything else go up over the following
-/// ticks, nearest the arrival point first, so raising the city doesn't stall the server.
+/// invisible barriers. The tiles are laid at once; the walls, rocks, cables and everything else go up over the
+/// following ticks, nearest the arrival point first, so raising the city doesn't stall the server.
 /// </summary>
 public sealed partial class CitySystem : EntitySystem
 {
@@ -80,7 +80,25 @@ public sealed partial class CitySystem : EntitySystem
         [CityStructure.Lamp] = "LightPostSmall",
         [CityStructure.Mountain] = "WallRockSand",
         [CityStructure.BoundaryWall] = "WallPlastitaniumIndestructible",
+        [CityStructure.Smes] = "SMESBasic",
+        [CityStructure.Substation] = "SubstationBasic",
     };
+
+    private static readonly (CityCable Cable, EntProtoId Proto)[] CableIds =
+    {
+        (CityCable.High, "CableHV"),
+        (CityCable.Medium, "CableMV"),
+        (CityCable.Low, "CableApcExtension"),
+    };
+
+    private static readonly Dictionary<CityFixture, EntProtoId> FixtureIds = new()
+    {
+        [CityFixture.Apc] = "APCBasic",
+        [CityFixture.Terminal] = "CableTerminal",
+    };
+
+    /// <summary>The plan's directions, in order, as the way an entity faces.</summary>
+    private static readonly Direction[] Facings = { Direction.North, Direction.East, Direction.South, Direction.West };
 
     private EntityUid? _city;
     private EntityUid? _returnPortal;
@@ -213,7 +231,18 @@ public sealed partial class CitySystem : EntitySystem
 
                 if (Walled(plan, x, y))
                     spawns.Add((Barrier, tile, Angle.Zero));
+
+                foreach (var (cable, proto) in CableIds)
+                {
+                    if ((plan.Cable(x, y) & cable) != 0)
+                        spawns.Add((proto, tile, Angle.Zero));
+                }
             }
+        }
+
+        foreach (var (kind, x, y, direction) in plan.Fixtures)
+        {
+            spawns.Add((FixtureIds[kind], new Vector2i(x, y), Facings[direction].ToAngle()));
         }
 
         _pending.Clear();
