@@ -62,4 +62,10 @@ public sealed partial class CyberAvatarComponent : Component
 
     [ViewVariables]
     public EntityUid? OpenDeckAction;
+
+    /// <summary>
+    /// The machines they've breached this run.
+    /// </summary>
+    [ViewVariables]
+    public HashSet<EntityUid> Breached = new();
 }

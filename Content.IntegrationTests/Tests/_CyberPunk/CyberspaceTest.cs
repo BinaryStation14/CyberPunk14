@@ -6,11 +6,15 @@ using Content.IntegrationTests.Fixtures;
 using Content.Server._CyberPunk.Cyberspace;
 using Content.Server._CyberPunk.Machines;
 using Content.Server.Body.Components;
+using Content.Shared._CyberPunk.Machines;
+using Content.Shared.Access.Components;
+using Content.Shared.Access.Systems;
 using Content.Shared.Body;
 using Content.Shared.Body.Components;
 using Content.Shared.Damage.Systems;
 using Content.Shared.Hands.EntitySystems;
 using Content.Shared.Humanoid;
+using Content.Shared.Interaction;
 using Content.Shared.Inventory;
 using Content.Shared.Mind;
 using Content.Shared.Power.EntitySystems;
@@ -326,6 +330,112 @@ public sealed class CyberspaceTest : GameTest
     {
         Assert.That(visualBody.TryGatherMarkingsData(body, null, out _, out _, out var applied));
         return applied!.Values.SelectMany(layers => layers.Values).SelectMany(m => m).Select(m => m.MarkingId.Id).ToList();
+    }
+
+    /// <summary>
+    /// A runner uses a computer's node and its terminal opens, and stays open though the computer is on another
+    /// map. A locked computer opens once they've stood at its node long enough to breach it. Jacking out closes
+    /// them, and the computer gets its range back.
+    /// </summary>
+    [Test]
+    public async Task RunnersOpenMachinesFromTheirNodes()
+    {
+        var server = Pair.Server;
+        _entMan = server.ResolveDependency<IEntityManager>();
+        var cyberspace = _entMan.System<CyberspaceSystem>();
+        var mapSys = _entMan.System<SharedMapSystem>();
+        var power = _entMan.System<SharedPowerReceiverSystem>();
+        var minds = _entMan.System<SharedMindSystem>();
+        var hands = _entMan.System<SharedHandsSystem>();
+        var godmode = _entMan.System<SharedGodmodeSystem>();
+        var interaction = _entMan.System<SharedInteractionSystem>();
+        var ui = _entMan.System<SharedUserInterfaceSystem>();
+        var access = _entMan.System<AccessReaderSystem>();
+
+        EntityUid computer = default, locked = default, accessPoint = default, runner = default, deck = default;
+        await server.WaitAssertion(() =>
+        {
+            mapSys.CreateMap(out var mapId);
+            _grid = mapSys.CreateGridEntity(mapId);
+            for (var x = 0; x < 6; x++)
+            {
+                for (var y = 0; y < 3; y++)
+                {
+                    mapSys.SetTile(_grid, new Vector2i(x, y), new Tile(1));
+                }
+
+                Place("CableData", x, 0);
+            }
+
+            computer = Place("ComputerProgrammable", 0, 0);
+            locked = Place("ComputerProgrammable", 5, 0);
+            accessPoint = Place("AccessPoint", 3, 0);
+            var router = Place("NetworkRouter", 1, 1);
+            foreach (var ent in new[] { computer, locked, accessPoint, router })
+            {
+                power.SetNeedsPower(ent, false);
+            }
+
+            var reader = _entMan.EnsureComponent<AccessReaderComponent>(locked);
+            access.TryAddAccess((locked, reader), "Captain");
+
+            (runner, deck) = Runner(minds, hands, godmode, 3, 1);
+        });
+
+        await server.WaitRunTicks(30);
+
+        EntityUid avatar = default;
+        float range = default;
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(cyberspace.TryJackIn(runner, deck, accessPoint, true));
+            Assert.That(cyberspace.IsJackedIn(runner, out var a));
+            avatar = a!.Value;
+            Assert.That(ui.TryGetInterfaceData(computer, MachineTerminalUiKey.Key, out var data));
+            range = data!.InteractionRange;
+
+            Stand(avatar, cyberspace.NodeOf(computer)!.Value);
+            interaction.InteractionActivate(avatar, cyberspace.NodeOf(computer)!.Value);
+            Assert.That(ui.IsUiOpen(computer, MachineTerminalUiKey.Key, avatar));
+        });
+
+        await server.WaitRunTicks(10);
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(ui.IsUiOpen(computer, MachineTerminalUiKey.Key, avatar), "it stays open across maps");
+
+            Stand(avatar, cyberspace.NodeOf(locked)!.Value);
+            interaction.InteractionActivate(avatar, cyberspace.NodeOf(locked)!.Value);
+            Assert.That(ui.IsUiOpen(locked, MachineTerminalUiKey.Key, avatar), Is.False, "it's locked");
+        });
+
+        await server.WaitRunTicks(250);
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(ui.IsUiOpen(locked, MachineTerminalUiKey.Key, avatar), "breached, it opens");
+
+            cyberspace.JackOut(runner, "", false);
+        });
+
+        await server.WaitRunTicks(2);
+        await server.WaitAssertion(() =>
+        {
+            foreach (var machine in new[] { computer, locked })
+            {
+                Assert.That(ui.IsUiOpen(machine, MachineTerminalUiKey.Key, avatar), Is.False);
+                Assert.That(ui.TryGetInterfaceData(machine, MachineTerminalUiKey.Key, out var data));
+                Assert.That(data!.InteractionRange, Is.EqualTo(range), "the range comes back");
+            }
+        });
+    }
+
+    /// <summary>
+    /// Puts a runner's virtual body on a node.
+    /// </summary>
+    private void Stand(EntityUid avatar, EntityUid node)
+    {
+        var xforms = _entMan.System<SharedTransformSystem>();
+        xforms.SetCoordinates(avatar, _entMan.GetComponent<TransformComponent>(node).Coordinates);
     }
 
     /// <summary>

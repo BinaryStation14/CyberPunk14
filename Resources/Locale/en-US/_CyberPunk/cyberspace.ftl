@@ -30,6 +30,10 @@ cyberspace-lost-remote = You lose the machine you were hacking, and the network 
 cyberspace-path-dissolves = The path dissolves under you, and you with it. Dumpshock!
 cyberspace-body-down = Your body hits the floor and the connection goes with it. Dumpshock!
 
+cyberspace-node-no-ui = There's nothing to open at {THE($node)}.
+cyberspace-breaching = {CAPITALIZE(THE($node))} is locked. You start breaching it...
+cyberspace-breached = You breach {THE($node)}.
+
 species-name-cyber-avatar = Avatar
 reagent-name-ghostlight = ghostlight
 reagent-desc-ghostlight = What a virtual body bleeds: a runner's signal, leaking out of them as glowing light.

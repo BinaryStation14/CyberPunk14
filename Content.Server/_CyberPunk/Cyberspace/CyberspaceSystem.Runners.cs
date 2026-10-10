@@ -310,6 +310,9 @@ public sealed partial class CyberspaceSystem
         runner.Comp.JackedIn = null;
         if (runner.Comp.Avatar is { } avatar && !TerminatingOrDeleted(avatar))
         {
+            if (TryComp<CyberAvatarComponent>(avatar, out var avatarComp))
+                avatarComp.Breached.Clear();
+
             DetachSpur(avatar);
             _machines.SetVirtualHost(avatar, null);
             if (TryComp<WasmMachineComponent>(avatar, out var machine))
@@ -417,5 +420,6 @@ public sealed partial class CyberspaceSystem
     {
         base.Update(frameTime);
         TendRunners();
+        TendRemoteUis();
     }
 }

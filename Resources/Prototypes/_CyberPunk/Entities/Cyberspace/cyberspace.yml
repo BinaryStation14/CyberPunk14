@@ -132,6 +132,7 @@
       Burn:
         sprite: Mobs/Effects/burn_damage.rsi
   - type: CyberAvatar
+  - type: DoAfter
   - type: WasmMachine
     kind: Deck
     files:
@@ -144,7 +145,8 @@
 
         Walk the paths to find the machines on the network: each has a node on
         its pad, and the router's pad opens onto the bus that joins every
-        network to the backbone.
+        network to the backbone. Use a node to open its machine; one your ID
+        doesn't open takes three seconds at its node to breach.
 
         Jack out from the action bar, and open this terminal again from there.
         Lose your deck, your body or your way, and you're thrown out with
