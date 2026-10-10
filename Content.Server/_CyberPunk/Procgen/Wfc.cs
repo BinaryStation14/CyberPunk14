@@ -1,11 +1,11 @@
 using System.Linq;
 using System.Numerics;
 
-namespace Content.Server._CyberPunk.Cyberspace;
+namespace Content.Server._CyberPunk.Procgen;
 
 /// <summary>
 /// A small deterministic random number generator, SplitMix64 as in Switchboard's <c>sb_procgen/src/rng.rs</c>,
-/// so the same seed gives the same cyberspace on every platform and version.
+/// so the same seed gives the same map on every platform and version.
 /// </summary>
 public struct CyberRng
 {
@@ -31,6 +31,32 @@ public struct CyberRng
             z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9;
             z = (z ^ (z >> 27)) * 0x94D049BB133111EB;
             return z ^ (z >> 31);
+        }
+    }
+
+    /// <summary>A number from <paramref name="min"/> up to and including <paramref name="max"/>.</summary>
+    public int Range(int min, int max)
+    {
+        return min + (int) (NextU64() % (ulong) (max - min + 1));
+    }
+
+    /// <summary>True <paramref name="n"/> times in <paramref name="d"/>.</summary>
+    public bool Chance(int n, int d)
+    {
+        return NextU64() % (ulong) d < (ulong) n;
+    }
+
+    public T Pick<T>(IReadOnlyList<T> items)
+    {
+        return items[Range(0, items.Count - 1)];
+    }
+
+    public void Shuffle<T>(IList<T> items)
+    {
+        for (var i = items.Count - 1; i > 0; i--)
+        {
+            var j = Range(0, i);
+            (items[i], items[j]) = (items[j], items[i]);
         }
     }
 }
@@ -179,6 +205,14 @@ public sealed class WfcRules
 /// </summary>
 public sealed class WfcWave
 {
+    /// <summary>Directions in the order sockets are listed: north (y up), east, south, west.</summary>
+    public static readonly (int X, int Y)[] Directions = { (0, 1), (1, 0), (0, -1), (-1, 0) };
+
+    public static int Opposite(int direction)
+    {
+        return (direction + 2) % 4;
+    }
+
     private readonly int _width;
     private readonly int _height;
     private readonly WfcSet[] _cells;
@@ -199,7 +233,7 @@ public sealed class WfcWave
 
     private int? Neighbour(int i, int direction)
     {
-        var (dx, dy) = CyberRegionGenerator.Directions[direction];
+        var (dx, dy) = Directions[direction];
         var x = i % _width + dx;
         var y = i / _width + dy;
         return x >= 0 && y >= 0 && x < _width && y < _height ? y * _width + x : null;

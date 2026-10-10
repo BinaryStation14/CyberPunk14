@@ -1,4 +1,5 @@
 using System.Linq;
+using Content.Server._CyberPunk.Procgen;
 
 namespace Content.Server._CyberPunk.Cyberspace;
 
@@ -33,14 +34,6 @@ public static class CyberRegionGenerator
     /// <summary>Tries before the WFC pass falls back to wide corridors everywhere.</summary>
     private const int Attempts = 10;
 
-    /// <summary>Directions in the order sockets are listed: north (y up), east, south, west.</summary>
-    public static readonly (int X, int Y)[] Directions = { (0, 1), (1, 0), (0, -1), (-1, 0) };
-
-    private static int Opposite(int direction)
-    {
-        return (direction + 2) % 4;
-    }
-
     /// <summary>What a side of a cell joins to.</summary>
     private enum Socket : byte
     {
@@ -70,7 +63,7 @@ public static class CyberRegionGenerator
     private static readonly List<Piece> Pieces = MakePieces();
 
     private static readonly WfcRules Rules = new(Pieces.Select(p => p.Weight).ToArray(),
-        (a, direction, b) => Pieces[a].Sockets[direction] == Pieces[b].Sockets[Opposite(direction)]);
+        (a, direction, b) => Pieces[a].Sockets[direction] == Pieces[b].Sockets[WfcWave.Opposite(direction)]);
 
     private static List<Piece> MakePieces()
     {
@@ -150,7 +143,7 @@ public static class CyberRegionGenerator
                     break;
                 }
 
-                foreach (var (dx, dy) in Directions)
+                foreach (var (dx, dy) in WfcWave.Directions)
                 {
                     var n = (at.X + dx, at.Y + dy);
                     if (n.Item1 < 0 || n.Item2 < 0 || n.Item1 >= width || n.Item2 >= height)
@@ -171,9 +164,9 @@ public static class CyberRegionGenerator
             while (back != from)
             {
                 var prev = came[back];
-                var d = Array.FindIndex(Directions, dir => prev.Item1 + dir.X == back.Item1 && prev.Item2 + dir.Y == back.Item2);
+                var d = Array.FindIndex(WfcWave.Directions, dir => prev.Item1 + dir.X == back.Item1 && prev.Item2 + dir.Y == back.Item2);
                 SidesOf(prev)[d] = true;
-                SidesOf(back)[Opposite(d)] = true;
+                SidesOf(back)[WfcWave.Opposite(d)] = true;
                 back = prev;
             }
         }

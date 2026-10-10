@@ -1,0 +1,9 @@
+- type: tile
+  id: CityOcean
+  name: tiles-city-ocean
+  sprite: /Textures/_CyberPunk/Tiles/City/ocean.png
+  isSubfloor: false
+  indestructible: true
+  heatCapacity: 10000
+  footstepSounds:
+    collection: FootstepWater

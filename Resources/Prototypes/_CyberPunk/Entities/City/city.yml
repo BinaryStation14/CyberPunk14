@@ -1,0 +1,44 @@
+# The generated city (CitySystem).
+
+- type: entity
+  parent: PortalGatewayOrange
+  id: CityPortal
+  name: city gateway
+  description: Leads out to the city. The first person through raises it from the badlands.
+  components:
+  - type: CityPortal
+  - type: Portal
+    canTeleportToOtherMaps: true
+    randomTeleport: false
+
+- type: entity
+  parent: PortalGatewayOrange
+  id: CityReturnPortal
+  name: gateway back
+  description: Leads back to where you came from.
+  categories: [ HideSpawnMenu ]
+  components:
+  - type: Portal
+    canTeleportToOtherMaps: true
+    randomTeleport: false
+
+- type: entity
+  id: CityBarrier
+  name: edge of the world
+  description: Nobody goes any further than this.
+  categories: [ HideSpawnMenu ]
+  components:
+  - type: Transform
+    anchored: true
+  - type: Physics
+    bodyType: Static
+  - type: Fixtures
+    fixtures:
+      fix1:
+        shape:
+          !type:PhysShapeAabb
+          bounds: "-0.5,-0.5,0.5,0.5"
+        mask:
+        - FullTileMask
+        layer:
+        - WallLayer
