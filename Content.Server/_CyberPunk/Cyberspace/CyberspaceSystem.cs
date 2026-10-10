@@ -24,8 +24,11 @@ namespace Content.Server._CyberPunk.Cyberspace;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Each network keeps the region it first took, by its router, while the router exists. Machines keep their
-/// slots while unplugged, so plugging one back in puts it where it was.
+/// Unlike Switchboard's fixed grid of regions, each region is as big as its network needs and sits along a
+/// street that grows as networks come up (<see cref="CyberLayout"/>). A network keeps its region, by its router,
+/// while the router exists. When it outgrows the region, the region is made again somewhere it fits, and the
+/// runners in it are moved along with it. Machines keep their slots while unplugged, so plugging one back in
+/// puts it where it was.
 /// </para>
 /// <para>
 /// Tiles don't stop anyone walking, so the tiles that can't be walked on next to ones that can are walled off
@@ -40,15 +43,6 @@ public sealed partial class CyberspaceSystem : EntitySystem
     [Dependency] private MetaDataSystem _meta = default!;
     [Dependency] private SharedMapSystem _map = default!;
     [Dependency] private SharedTransformSystem _transform = default!;
-
-    /// <summary>Regions kept spare for networks built during the round.</summary>
-    public const int SpareRegions = 4;
-
-    /// <summary>The fewest regions cyberspace has room for.</summary>
-    public const int MinRegions = 8;
-
-    /// <summary>The fewest hosts a region has room for.</summary>
-    public const int MinHosts = 12;
 
     /// <summary>Practice regions, sealed off from everything.</summary>
     public const int Sandboxes = 8;
@@ -88,6 +82,11 @@ public sealed partial class CyberspaceSystem : EntitySystem
         /// <summary>The router of the network it belongs to.</summary>
         public EntityUid? Router;
 
+        /// <summary>Its cells, while it has a place.</summary>
+        public CyberRect? Cells;
+
+        public RegionShape Shape = RegionShape.Smallest;
+
         /// <summary>Each machine's slot, kept while it's away.</summary>
         public readonly Dictionary<EntityUid, (int X, int Y)> Slots = new();
 
@@ -102,17 +101,18 @@ public sealed partial class CyberspaceSystem : EntitySystem
 
     private EntityUid? _mapUid;
     private CyberLayout? _layout;
-    private CyberFloor[] _tiles = Array.Empty<CyberFloor>();
+    private readonly Dictionary<(int X, int Y), CyberFloor> _tiles = new();
     private ulong _seed;
-    private Region[] _regions = Array.Empty<Region>();
+    private readonly List<Region> _regions = new();
+
+    /// <summary>The cells of street with bus laid on them so far.</summary>
+    private (int West, int East) _street;
+
     private readonly Dictionary<(int, int), EntityUid> _barriers = new();
     private readonly HashSet<(int, int)> _dirtyChunks = new();
 
     /// <summary>The map holding cyberspace, once it's made.</summary>
     public EntityUid? MapUid => _mapUid;
-
-    /// <summary>Its layout, once it's made.</summary>
-    public CyberLayout? Layout => _layout;
 
     public override void Initialize()
     {
@@ -136,8 +136,8 @@ public sealed partial class CyberspaceSystem : EntitySystem
     {
         _mapUid = null;
         _layout = null;
-        _tiles = Array.Empty<CyberFloor>();
-        _regions = Array.Empty<Region>();
+        _tiles.Clear();
+        _regions.Clear();
         _barriers.Clear();
         _dirtyChunks.Clear();
         _spurs.Clear();
@@ -145,15 +145,11 @@ public sealed partial class CyberspaceSystem : EntitySystem
     }
 
     /// <summary>
-    /// The tile of cyberspace at a position, void outside it.
+    /// The tile of cyberspace at a position, void where there's nothing.
     /// </summary>
     public CyberFloor FloorAt(int x, int y)
     {
-        if (_layout == null)
-            return CyberFloor.Void;
-
-        var (w, h) = _layout.Size;
-        return x < 0 || y < 0 || x >= w || y >= h ? CyberFloor.Void : _tiles[y * w + x];
+        return _tiles.GetValueOrDefault((x, y));
     }
 
     /// <summary>
@@ -161,13 +157,16 @@ public sealed partial class CyberspaceSystem : EntitySystem
     /// </summary>
     public int? RegionOf(EntityUid router)
     {
-        for (var r = 0; r < _regions.Length; r++)
-        {
-            if (_regions[r].Router == router)
-                return r;
-        }
+        var r = _regions.FindIndex(region => region.Router == router);
+        return r < 0 ? null : r;
+    }
 
-        return null;
+    /// <summary>
+    /// A region's tiles, if it has a place.
+    /// </summary>
+    public CyberRect? RegionRect(int region)
+    {
+        return _regions[region].Cells is { } cells ? CyberLayout.Tiles(cells) : null;
     }
 
     /// <summary>
@@ -194,7 +193,7 @@ public sealed partial class CyberspaceSystem : EntitySystem
             if (ev.Networks.Count == 0)
                 return;
 
-            Create(ev.Networks);
+            Create();
         }
 
         Rebuild(ev.Networks);
@@ -210,20 +209,16 @@ public sealed partial class CyberspaceSystem : EntitySystem
             Reset();
 
         if (_mapUid == null)
-            Create(new List<MachineNetwork>());
+            Create();
     }
 
     /// <summary>
-    /// Makes the cyberspace map, with room for the networks there are now and a few more.
+    /// Makes the cyberspace map: the hub with the backbone in its middle, and no street yet.
     /// </summary>
-    private void Create(List<MachineNetwork> networks)
+    private void Create()
     {
-        var regions = Math.Max(networks.Count + SpareRegions, MinRegions);
-        var hosts = Math.Max(networks.Select(n => n.Hosts.Count).DefaultIfEmpty(0).Max() + 3, MinHosts);
-        var layout = new CyberLayout(regions, hosts, Sandboxes);
-        _layout = layout;
+        _layout = new CyberLayout();
         _seed = (ulong) (uint) _random.Next() << 32 | (uint) _random.Next();
-        _regions = Enumerable.Range(0, layout.AllRegions).Select(_ => new Region()).ToArray();
 
         var mapUid = _map.CreateMap(out _);
         _mapUid = mapUid;
@@ -240,16 +235,36 @@ public sealed partial class CyberspaceSystem : EntitySystem
         light.AmbientLightColor = Color.FromHex("#C8D2FF");
         Dirty(mapUid, light);
 
-        var (w, h) = layout.Size;
-        _tiles = new CyberFloor[w * h];
-        Paint(new CyberRect(0, 0, w, h), layout.Base());
+        var hub = CyberLayout.Tiles(CyberLayout.HubCells);
+        Paint(hub, Enumerable.Repeat(CyberFloor.Bus, hub.W * hub.H).ToArray());
+        _street = (-CyberLayout.HubHalf, CyberLayout.HubHalf);
+        FlushBarriers();
 
-        var hub = layout.HubRect;
         var backbone = Spawn(NodePrototypes[CyberNodeKind.Backbone],
-            new EntityCoordinates(mapUid, hub.X + hub.W / 2 + 0.5f, hub.Y + hub.H / 2 + 0.5f));
+            new EntityCoordinates(mapUid, CyberLayout.Cell / 2 + 0.5f, CyberLayout.Cell / 2 + 0.5f));
         var node = EnsureComp<CyberNodeComponent>(backbone);
         node.Kind = CyberNodeKind.Backbone;
         _meta.SetEntityName(backbone, "city backbone");
+    }
+
+    /// <summary>
+    /// Lays bus along the street as far as the layout says it now runs.
+    /// </summary>
+    private void ExtendStreet()
+    {
+        var (west, east) = (_layout!.StreetWest, _layout.StreetEast);
+        if (west < _street.West)
+            PaintBus(west, _street.West - 1);
+        if (east > _street.East)
+            PaintBus(_street.East + 1, east);
+
+        _street = (Math.Min(west, _street.West), Math.Max(east, _street.East));
+    }
+
+    private void PaintBus(int fromCell, int toCell)
+    {
+        var rect = CyberLayout.Tiles(new CyberRect(fromCell, 0, toCell - fromCell + 1, 1));
+        Paint(rect, Enumerable.Repeat(CyberFloor.Bus, rect.W * rect.H).ToArray());
     }
 
     /// <summary>
@@ -257,7 +272,7 @@ public sealed partial class CyberspaceSystem : EntitySystem
     /// </summary>
     private void Rebuild(List<MachineNetwork> networks)
     {
-        if (_layout is not { } layout)
+        if (_layout == null)
             return;
 
         // A network whose router is gone gives its region back.
@@ -270,16 +285,19 @@ public sealed partial class CyberspaceSystem : EntitySystem
             }
         }
 
-        // A network new to cyberspace takes the first free region.
-        var byRegion = new MachineNetwork?[layout.Regions];
+        // A network new to cyberspace takes a region nobody has, or a new one.
+        var byRegion = new Dictionary<int, MachineNetwork>();
         foreach (var network in networks)
         {
             var r = RegionOf(network.Router);
             if (r == null)
             {
-                r = Array.FindIndex(_regions, 0, layout.Regions, region => region.Router == null);
+                r = _regions.FindIndex(region => region.Router == null && region.Cells == null);
                 if (r < 0)
-                    continue;
+                {
+                    _regions.Add(new Region());
+                    r = _regions.Count - 1;
+                }
 
                 _regions[r.Value].Router = network.Router;
             }
@@ -287,66 +305,100 @@ public sealed partial class CyberspaceSystem : EntitySystem
             byRegion[r.Value] = network;
         }
 
-        for (var r = 0; r < layout.Regions; r++)
+        for (var r = 0; r < _regions.Count; r++)
         {
-            RebuildRegion(layout, r, byRegion[r]);
+            RebuildRegion(r, byRegion.GetValueOrDefault(r));
         }
 
         FlushBarriers();
     }
 
-    private void RebuildRegion(CyberLayout layout, int r, MachineNetwork? network)
+    private void RebuildRegion(int r, MachineNetwork? network)
     {
         var region = _regions[r];
-        var pads = new List<(EntityUid Machine, (int X, int Y) Slot, PadKind Kind)>();
-        var links = network?.Links ?? new List<(EntityUid A, EntityUid B)>();
-        if (network != null)
+        if (network == null)
         {
-            var switches = network.Hubs.Where(h => h != network.Router).ToList();
-            var hosts = network.Hosts.Select(h => h.Machine).ToList();
-            var present = new HashSet<EntityUid>(switches.Concat(hosts)) { network.Router };
-            var kept = region.Slots.Where(s => !present.Contains(s.Key)).Select(s => s.Value).ToHashSet();
-            var held = new HashSet<(int, int)>();
-
-            // Pads on slots: the router at the top, switches, then hosts near their switch. Machines keep
-            // their slots.
-            held.Add(layout.RouterSlot);
-            pads.Add((network.Router, layout.RouterSlot, PadKind.Router));
-
-            var switchSlots = layout.SwitchSlots;
-            foreach (var hub in switches)
+            if (region.Cells is { } gone)
             {
-                var slot = KeptSlot(region, hub, switchSlots, held) ?? FreeSlot(switchSlots, held, kept, null);
-                if (slot is not { } s)
-                    continue;
-
-                held.Add(s);
-                pads.Add((hub, s, PadKind.Switch));
+                ClearTiles(CyberLayout.Tiles(gone));
+                _layout!.Free(gone);
+                region.Cells = null;
+                region.Graph = null;
+                region.Pads.Clear();
+                region.Router = null;
+                region.Slots.Clear();
+                SyncNodes(r, null, new List<(EntityUid, (int X, int Y), PadKind)>());
+                RestampSpurs(r);
             }
 
-            var hostSlots = layout.HostSlots;
-            foreach (var host in hosts)
+            return;
+        }
+
+        var switches = network.Hubs.Where(h => h != network.Router).ToList();
+        var hosts = network.Hosts.Select(h => h.Machine).ToList();
+
+        // A network that has outgrown its region, or has none yet, gets one big enough.
+        CyberRect? moved = null;
+        if (region.Cells == null || !region.Shape.Fits(hosts.Count, switches.Count))
+        {
+            moved = region.Cells;
+            if (moved is { } old)
             {
-                var hardware = FirstHardware(host, links, network.Hubs);
-                (int, int)? near = null;
-                foreach (var pad in pads)
-                {
-                    if (pad.Machine == hardware)
-                        near = pad.Slot;
-                }
-
-                var slot = KeptSlot(region, host, hostSlots, held) ?? FreeSlot(hostSlots, held, kept, near);
-                if (slot is not { } s)
-                    continue;
-
-                held.Add(s);
-                pads.Add((host, s, PadKind.Host));
+                ClearTiles(CyberLayout.Tiles(old));
+                _layout!.Free(old);
             }
 
-            foreach (var (machine, slot, _) in pads)
+            region.Shape = RegionShape.For(hosts.Count, switches.Count);
+            region.Cells = _layout!.Place(region.Shape);
+            region.Graph = null;
+            ExtendStreet();
+        }
+
+        var shape = region.Shape;
+        var pads = new List<(EntityUid Machine, (int X, int Y) Slot, PadKind Kind)>();
+        var links = network.Links;
+        var present = new HashSet<EntityUid>(switches.Concat(hosts)) { network.Router };
+        var kept = region.Slots.Where(s => !present.Contains(s.Key)).Select(s => s.Value).ToHashSet();
+        var held = new HashSet<(int, int)>();
+
+        // Pads on slots: the router at the top, switches, then hosts near their switch. Machines keep
+        // their slots.
+        held.Add(shape.RouterSlot);
+        pads.Add((network.Router, shape.RouterSlot, PadKind.Router));
+
+        var switchSlots = shape.SwitchSlots;
+        foreach (var hub in switches)
+        {
+            var slot = KeptSlot(region, hub, switchSlots, held) ?? FreeSlot(switchSlots, held, kept, null);
+            if (slot is not { } s)
+                continue;
+
+            held.Add(s);
+            pads.Add((hub, s, PadKind.Switch));
+        }
+
+        var hostSlots = shape.HostSlots;
+        foreach (var host in hosts)
+        {
+            var hardware = FirstHardware(host, links, network.Hubs);
+            (int, int)? near = null;
+            foreach (var pad in pads)
             {
-                region.Slots[machine] = slot;
+                if (pad.Machine == hardware)
+                    near = pad.Slot;
             }
+
+            var slot = KeptSlot(region, host, hostSlots, held) ?? FreeSlot(hostSlots, held, kept, near);
+            if (slot is not { } s)
+                continue;
+
+            held.Add(s);
+            pads.Add((host, s, PadKind.Host));
+        }
+
+        foreach (var (machine, slot, _) in pads)
+        {
+            region.Slots[machine] = slot;
         }
 
         var index = new Dictionary<EntityUid, int>();
@@ -366,22 +418,85 @@ public sealed partial class CyberspaceSystem : EntitySystem
         {
             Pads = pads.Select(p => (p.Slot, p.Kind)).ToList(),
             Links = padLinks.ToList(),
-            Gate = pads.FindIndex(p => p.Kind == PadKind.Router) is var gate and >= 0 ? gate : null,
+            Gate = 0,
         };
 
         var machines = pads.Select(p => p.Machine).ToList();
-        if (region.Graph is not { } old || !old.Same(graph) || !region.Pads.SequenceEqual(machines))
+        if (region.Graph is { } current && current.Same(graph) && region.Pads.SequenceEqual(machines))
         {
-            region.Graph = graph;
-            region.Pads = machines;
-            var seed = new CyberRng(_seed ^ unchecked((ulong) r * 0x9E3779B97F4A7C15)).NextU64();
-            Paint(layout.RegionRect(r), CyberRegionGenerator.Generate(seed, layout, graph));
-            SyncNodes(layout, r, network, pads);
-            RestampSpurs(r);
+            SyncNodes(r, network, pads);
             return;
         }
 
-        SyncNodes(layout, r, network, pads);
+        region.Graph = graph;
+        region.Pads = machines;
+        var seed = new CyberRng(_seed ^ unchecked((ulong) r * 0x9E3779B97F4A7C15)).NextU64();
+        PaintRegion(region.Cells!.Value, CyberRegionGenerator.Generate(seed, shape, graph));
+        SyncNodes(r, network, pads);
+        RestampSpurs(r);
+
+        if (moved is { } from)
+            MoveRunners(r, CyberLayout.Tiles(from));
+    }
+
+    /// <summary>
+    /// Paints a region's generated tiles into its cells, flipped if it's above the street.
+    /// </summary>
+    private void PaintRegion(CyberRect cells, CyberFloor[] tiles)
+    {
+        var rect = CyberLayout.Tiles(cells);
+        if (CyberLayout.Above(cells))
+        {
+            var flipped = new CyberFloor[tiles.Length];
+            for (var y = 0; y < rect.H; y++)
+            {
+                Array.Copy(tiles, y * rect.W, flipped, (rect.H - 1 - y) * rect.W, rect.W);
+            }
+
+            tiles = flipped;
+        }
+
+        Paint(rect, tiles);
+    }
+
+    /// <summary>
+    /// The tile at the middle of a slot in a region's cells.
+    /// </summary>
+    private static (int X, int Y) SlotCentre(CyberRect cells, (int X, int Y) slot)
+    {
+        var rect = CyberLayout.Tiles(cells);
+        var (lx, ly) = (slot.X * CyberLayout.Cell + CyberLayout.Cell / 2, slot.Y * CyberLayout.Cell + CyberLayout.Cell / 2);
+        return (rect.X + lx, CyberLayout.Above(cells) ? rect.Y + rect.H - 1 - ly : rect.Y + ly);
+    }
+
+    private void ClearTiles(CyberRect rect)
+    {
+        Paint(rect, new CyberFloor[rect.W * rect.H]);
+    }
+
+    /// <summary>
+    /// Brings the runners left where a region was to where it is now: to their own deck's node if it's here,
+    /// otherwise to the router's.
+    /// </summary>
+    private void MoveRunners(int r, CyberRect from)
+    {
+        var region = _regions[r];
+        if (region.Router is not { } router || !region.Nodes.TryGetValue(router, out var routerNode))
+            return;
+
+        var query = EntityQueryEnumerator<CyberAvatarComponent, TransformComponent>();
+        while (query.MoveNext(out var avatar, out _, out var xform))
+        {
+            if (xform.MapUid != _mapUid)
+                continue;
+
+            var pos = _transform.GetWorldPosition(xform);
+            if (!from.Contains((int) Math.Floor(pos.X), (int) Math.Floor(pos.Y)))
+                continue;
+
+            var to = _spurs.TryGetValue(avatar, out var spur) && spur.Region == r ? spur.Node : routerNode;
+            _transform.SetCoordinates(avatar, Transform(to).Coordinates);
+        }
     }
 
     /// <summary>
@@ -450,7 +565,7 @@ public sealed partial class CyberspaceSystem : EntitySystem
     /// <summary>
     /// Puts a node on every pad of a region, and takes away those of machines no longer there.
     /// </summary>
-    private void SyncNodes(CyberLayout layout, int r, MachineNetwork? network,
+    private void SyncNodes(int r, MachineNetwork? network,
         List<(EntityUid Machine, (int X, int Y) Slot, PadKind Kind)> pads)
     {
         var region = _regions[r];
@@ -482,7 +597,7 @@ public sealed partial class CyberspaceSystem : EntitySystem
                 _ => KindName(kind),
             };
 
-            var (x, y) = layout.SlotCentre(r, slot);
+            var (x, y) = SlotCentre(region.Cells!.Value, slot);
             var at = new EntityCoordinates(_mapUid!.Value, x + 0.5f, y + 0.5f);
 
             // A node that changes kind is made again; one that stays is moved and renamed.
@@ -552,10 +667,9 @@ public sealed partial class CyberspaceSystem : EntitySystem
     /// </summary>
     private void Paint(CyberRect rect, CyberFloor[] tiles)
     {
-        if (_layout is not { } layout || _mapUid is not { } mapUid || !TryComp<MapGridComponent>(mapUid, out var grid))
+        if (_mapUid is not { } mapUid || !TryComp<MapGridComponent>(mapUid, out var grid))
             return;
 
-        var w = layout.Size.W;
         // Tiles cleared go in before tiles laid: the explosion system's edge map counts a batch that does both at
         // once twice over.
         var cleared = new List<(Vector2i, Tile)>();
@@ -565,14 +679,17 @@ public sealed partial class CyberspaceSystem : EntitySystem
             for (var x = 0; x < rect.W; x++)
             {
                 var floor = tiles[y * rect.W + x];
-                var i = (rect.Y + y) * w + rect.X + x;
-                if (_tiles[i] == floor)
+                var at = (rect.X + x, rect.Y + y);
+                if (FloorAt(at.Item1, at.Item2) == floor)
                     continue;
 
-                _tiles[i] = floor;
+                if (floor == CyberFloor.Void)
+                    _tiles.Remove(at);
+                else
+                    _tiles[at] = floor;
 
                 var tile = TileIds.TryGetValue(floor, out var id) ? new Tile(_tileDefs[id].TileId) : Tile.Empty;
-                (tile.IsEmpty ? cleared : laid).Add((new Vector2i(rect.X + x, rect.Y + y), tile));
+                (tile.IsEmpty ? cleared : laid).Add((new Vector2i(at.Item1, at.Item2), tile));
             }
         }
 
@@ -582,13 +699,18 @@ public sealed partial class CyberspaceSystem : EntitySystem
             _map.SetTiles(mapUid, grid, laid);
 
         // The barriers on the tiles just round it may change too.
-        for (var cy = Math.Max(rect.Y - 1, 0) / Chunk; cy <= (rect.Y + rect.H) / Chunk; cy++)
+        for (var cy = ChunkOf(rect.Y - 1); cy <= ChunkOf(rect.Y + rect.H); cy++)
         {
-            for (var cx = Math.Max(rect.X - 1, 0) / Chunk; cx <= (rect.X + rect.W) / Chunk; cx++)
+            for (var cx = ChunkOf(rect.X - 1); cx <= ChunkOf(rect.X + rect.W); cx++)
             {
                 _dirtyChunks.Add((cx, cy));
             }
         }
+    }
+
+    private static int ChunkOf(int tile)
+    {
+        return (int) Math.Floor(tile / (float) Chunk);
     }
 
     /// <summary>
@@ -597,10 +719,9 @@ public sealed partial class CyberspaceSystem : EntitySystem
     /// </summary>
     private void FlushBarriers()
     {
-        if (_layout is not { } layout || _mapUid is not { } mapUid)
+        if (_mapUid is not { } mapUid)
             return;
 
-        var (w, h) = layout.Size;
         foreach (var chunk in _dirtyChunks)
         {
             if (_barriers.Remove(chunk, out var old))
@@ -609,12 +730,12 @@ public sealed partial class CyberspaceSystem : EntitySystem
             var (cx, cy) = chunk;
             var origin = new Vector2(cx * Chunk + Chunk / 2f, cy * Chunk + Chunk / 2f);
             var runs = new List<(int Y, int From, int To)>();
-            for (var y = cy * Chunk; y < Math.Min((cy + 1) * Chunk, h); y++)
+            for (var y = cy * Chunk; y < (cy + 1) * Chunk; y++)
             {
                 int? start = null;
-                for (var x = cx * Chunk; x <= Math.Min((cx + 1) * Chunk, w); x++)
+                for (var x = cx * Chunk; x <= (cx + 1) * Chunk; x++)
                 {
-                    var blocks = x < Math.Min((cx + 1) * Chunk, w) && NeedsBarrier(x, y);
+                    var blocks = x < (cx + 1) * Chunk && NeedsBarrier(x, y);
                     if (blocks && start == null)
                         start = x;
                     else if (!blocks && start is { } from)

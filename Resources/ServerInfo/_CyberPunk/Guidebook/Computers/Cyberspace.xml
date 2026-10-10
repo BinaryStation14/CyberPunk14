@@ -1,7 +1,7 @@
 <Document>
   # Cyberspace
 
-  Every network with a powered router has a region of cyberspace: a pad for each machine on it, paths along its cables, and a gate from the router's pad onto the data bus that joins every network to the city backbone. Pull a machine off the network and its pad and paths are gone; plug it back in and it's where it was.
+  Every network with a powered router has a region of cyberspace: a pad for each machine on it, paths along its cables, and a gate from the router's pad onto the data bus that joins every network to the city backbone. Pull a machine off the network and its pad and paths are gone; plug it back in and it's where it was. Regions line the bus on either side, each as big as its network, and a network that outgrows its region moves to a bigger one further along, taking any runners in it with it.
 
   <Box>
     <GuideEntityEmbed Entity="Cyberdeck"/>

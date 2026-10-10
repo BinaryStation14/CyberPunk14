@@ -109,7 +109,7 @@ public sealed class CyberspaceTest : GameTest
 
             // Every tile beside a path that can't be walked on is walled off.
             var mapId = _entMan.GetComponent<TransformComponent>(cyberspace.MapUid!.Value).MapID;
-            var rect = cyberspace.Layout!.RegionRect(cyberspace.RegionOf(router)!.Value);
+            var rect = cyberspace.RegionRect(cyberspace.RegionOf(router)!.Value)!.Value;
             var checkedOne = false;
             for (var y = rect.Y; y < rect.Y + rect.H; y++)
             {
@@ -450,6 +450,78 @@ public sealed class CyberspaceTest : GameTest
                 Assert.That(ui.TryGetInterfaceData(machine, MachineTerminalUiKey.Key, out var data));
                 Assert.That(data!.InteractionRange, Is.EqualTo(range), "the range comes back");
             }
+        });
+    }
+
+    /// <summary>
+    /// A network that outgrows its region gets a bigger one, with a node for every machine, and the runners in
+    /// it come along.
+    /// </summary>
+    [Test]
+    public async Task NetworksOutgrowTheirRegions()
+    {
+        var server = Pair.Server;
+        _entMan = server.ResolveDependency<IEntityManager>();
+        var cyberspace = _entMan.System<CyberspaceSystem>();
+        var mapSys = _entMan.System<SharedMapSystem>();
+        var power = _entMan.System<SharedPowerReceiverSystem>();
+        var minds = _entMan.System<SharedMindSystem>();
+        var hands = _entMan.System<SharedHandsSystem>();
+        var godmode = _entMan.System<SharedGodmodeSystem>();
+
+        const int count = 40;
+        EntityUid accessPoint = default, router = default, runner = default, deck = default;
+        await server.WaitAssertion(() =>
+        {
+            mapSys.CreateMap(out var mapId);
+            _grid = mapSys.CreateGridEntity(mapId);
+            for (var x = 0; x < count + 4; x++)
+            {
+                for (var y = 0; y < 3; y++)
+                {
+                    mapSys.SetTile(_grid, new Vector2i(x, y), new Tile(1));
+                }
+
+                Place("CableData", x, 0);
+            }
+
+            accessPoint = Place("AccessPoint", 1, 0);
+            router = Place("NetworkRouter", 0, 1);
+            power.SetNeedsPower(accessPoint, false);
+            power.SetNeedsPower(router, false);
+            (runner, deck) = Runner(minds, hands, godmode, 1, 1);
+        });
+
+        await server.WaitRunTicks(30);
+
+        CyberRect small = default;
+        var machines = new List<EntityUid>();
+        await server.WaitAssertion(() =>
+        {
+            small = cyberspace.RegionRect(cyberspace.RegionOf(router)!.Value)!.Value;
+            Assert.That(cyberspace.TryJackIn(runner, deck, accessPoint, true));
+            for (var i = 0; i < count; i++)
+            {
+                var machine = Place("VendingMachineCola", i + 3, 0);
+                power.SetNeedsPower(machine, false);
+                machines.Add(machine);
+            }
+        });
+
+        await server.WaitRunTicks(30);
+        await server.WaitAssertion(() =>
+        {
+            var rect = cyberspace.RegionRect(cyberspace.RegionOf(router)!.Value)!.Value;
+            Assert.That(rect.W * rect.H, Is.GreaterThan(small.W * small.H), "the region grew");
+            foreach (var machine in machines)
+            {
+                Assert.That(cyberspace.NodeOf(machine), Is.Not.Null, $"{machine} has a node");
+            }
+
+            Assert.That(cyberspace.IsJackedIn(runner, out var avatar), "the runner came along");
+            var at = Tile(avatar!.Value);
+            Assert.That(rect.Contains(at.X, at.Y));
+            Assert.That(CyberLayout.Walkable(cyberspace.FloorAt(at.X, at.Y)));
         });
     }
 

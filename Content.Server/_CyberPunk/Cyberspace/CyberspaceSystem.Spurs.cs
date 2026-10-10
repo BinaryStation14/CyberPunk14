@@ -51,16 +51,17 @@ public sealed partial class CyberspaceSystem
     {
         region = 0;
         centre = default;
-        if (_layout is not { } layout)
-            return false;
-
-        for (var r = 0; r < layout.Regions; r++)
+        for (var r = 0; r < _regions.Count; r++)
         {
-            if (!_regions[r].Nodes.ContainsKey(machine) || !_regions[r].Slots.TryGetValue(machine, out var slot))
+            if (_regions[r].Cells is not { } cells
+                || !_regions[r].Nodes.ContainsKey(machine)
+                || !_regions[r].Slots.TryGetValue(machine, out var slot))
+            {
                 continue;
+            }
 
             region = r;
-            centre = layout.SlotCentre(r, slot);
+            centre = SlotCentre(cells, slot);
             return true;
         }
 
@@ -108,7 +109,7 @@ public sealed partial class CyberspaceSystem
     /// </summary>
     private void LaySpur(Spur spur, (int X, int Y) from, (int X, int Y)? prefer)
     {
-        var rect = _layout!.RegionRect(spur.Region);
+        var rect = RegionRect(spur.Region)!.Value;
         var candidates = new List<((int X, int Y) Centre, List<(int X, int Y)> Data, List<(int X, int Y)> Pad)>();
         foreach (var length in new[] { 4, 5, 6 })
         {
@@ -202,17 +203,18 @@ public sealed partial class CyberspaceSystem
     /// </summary>
     private EntityCoordinates? BuildSandbox(int slot, EntityUid body)
     {
-        if (_layout is not { } layout || _mapUid is not { } mapUid)
+        if (_mapUid is not { } mapUid)
             return null;
 
-        var region = layout.Regions + slot;
-        var hosts = layout.HostSlots;
+        var shape = RegionShape.Smallest;
+        var cells = CyberLayout.PracticeCells(slot);
+        var hosts = shape.HostSlots;
         var graph = new RegionGraph
         {
             Pads =
             {
-                (layout.RouterSlot, PadKind.Router),
-                (layout.SwitchSlots[0], PadKind.Switch),
+                (shape.RouterSlot, PadKind.Router),
+                (shape.SwitchSlots[0], PadKind.Switch),
                 (hosts[0], PadKind.Host),
                 (hosts[1], PadKind.Host),
             },
@@ -220,19 +222,19 @@ public sealed partial class CyberspaceSystem
         };
 
         var seed = _seed ^ (0x5A4DB0C5UL + (ulong) slot);
-        Paint(layout.RegionRect(region), CyberRegionGenerator.Generate(seed, layout, graph));
+        PaintRegion(cells, CyberRegionGenerator.Generate(seed, shape, graph));
         FlushBarriers();
 
-        var at = (int i) => layout.SlotCentre(region, graph.Pads[i].Slot);
+        var at = (int i) => SlotCentre(cells, graph.Pads[i].Slot);
         var (sx, sy) = at(3);
         var server = Spawn(TrainingServerPrototype, new EntityCoordinates(mapUid, sx + 0.5f, sy + 0.5f));
         _machines.SetVirtualHost(server, new VirtualHost(null, slot, 2));
 
         var sandbox = new Sandbox { Body = body, Server = server };
-        sandbox.Nodes.Add(SpawnNode(CyberNodeKind.Router, at(0), "practice router", null, region));
-        sandbox.Nodes.Add(SpawnNode(CyberNodeKind.Switch, at(1), "practice switch", null, region));
-        sandbox.Nodes.Add(SpawnNode(CyberNodeKind.AccessPoint, at(2), "practice way in", null, region));
-        sandbox.Nodes.Add(SpawnNode(CyberNodeKind.Computer, at(3), "training server", server, region));
+        sandbox.Nodes.Add(SpawnNode(CyberNodeKind.Router, at(0), "practice router", null, null));
+        sandbox.Nodes.Add(SpawnNode(CyberNodeKind.Switch, at(1), "practice switch", null, null));
+        sandbox.Nodes.Add(SpawnNode(CyberNodeKind.AccessPoint, at(2), "practice way in", null, null));
+        sandbox.Nodes.Add(SpawnNode(CyberNodeKind.Computer, at(3), "training server", server, null));
         _sandboxes[slot] = sandbox;
 
         var (x, y) = at(2);
@@ -244,7 +246,7 @@ public sealed partial class CyberspaceSystem
     /// </summary>
     private void TeardownSandbox(int slot)
     {
-        if (_sandboxes[slot] is not { } sandbox || _layout is not { } layout)
+        if (_sandboxes[slot] is not { } sandbox)
             return;
 
         _sandboxes[slot] = null;
@@ -255,8 +257,7 @@ public sealed partial class CyberspaceSystem
             QueueDel(node);
         }
 
-        var rect = layout.RegionRect(layout.Regions + slot);
-        Paint(rect, new CyberFloor[rect.W * rect.H]);
+        ClearTiles(CyberLayout.Tiles(CyberLayout.PracticeCells(slot)));
         FlushBarriers();
     }
 

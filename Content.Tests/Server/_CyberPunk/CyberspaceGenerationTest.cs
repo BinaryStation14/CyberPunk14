@@ -14,23 +14,20 @@ namespace Content.Tests.Server._CyberPunk;
 [TestOf(typeof(CyberRegionGenerator))]
 public sealed class CyberspaceGenerationTest
 {
-    private const int Width = CyberLayout.RegionWidth * CyberLayout.Cell;
+    private static readonly RegionShape Shape = RegionShape.For(9, 2);
 
-    private static CyberLayout Layout()
-    {
-        return new CyberLayout(8, 12);
-    }
+    private static readonly int Width = Shape.Width * CyberLayout.Cell;
 
     /// <summary>A router, two switches and hosts under each.</summary>
-    private static RegionGraph Graph(CyberLayout layout)
+    private static RegionGraph Graph()
     {
-        var hosts = layout.HostSlots;
-        var switches = layout.SwitchSlots;
+        var hosts = Shape.HostSlots;
+        var switches = Shape.SwitchSlots;
         return new RegionGraph
         {
             Pads =
             {
-                (layout.RouterSlot, PadKind.Router),
+                (Shape.RouterSlot, PadKind.Router),
                 (switches[0], PadKind.Switch),
                 (switches[1], PadKind.Switch),
                 (hosts[0], PadKind.Host),
@@ -86,12 +83,11 @@ public sealed class CyberspaceGenerationTest
     [Test]
     public void LinkedPadsAreJoinedAndUnlinkedOnesAreNot()
     {
-        var layout = Layout();
-        var graph = Graph(layout);
+        var graph = Graph();
 
         // An unplugged host: a pad with no links.
-        graph.Pads.Add((layout.HostSlots[4], PadKind.Host));
-        var tiles = CyberRegionGenerator.Generate(7, layout, graph);
+        graph.Pads.Add((Shape.HostSlots[4], PadKind.Host));
+        var tiles = CyberRegionGenerator.Generate(7, Shape, graph);
         var reached = Flood(tiles, Width, Centre(graph.Pads[0].Slot));
         for (var i = 0; i < graph.Pads.Count; i++)
         {
@@ -101,11 +97,11 @@ public sealed class CyberspaceGenerationTest
         }
 
         // The gate opens the router's pad onto the top edge.
-        var top = (layout.RegionHeight * CyberLayout.Cell - 1) * Width + layout.RouterSlot.X * CyberLayout.Cell + 2;
+        var top = (Shape.Height * CyberLayout.Cell - 1) * Width + Shape.RouterSlot.X * CyberLayout.Cell + 2;
         Assert.That(Walkable(tiles, top));
 
         // Nothing else reaches the edge.
-        var height = layout.RegionHeight * CyberLayout.Cell;
+        var height = Shape.Height * CyberLayout.Cell;
         var edge = Enumerable.Range(0, Width)
             .Concat(Enumerable.Range(0, height).Select(y => y * Width))
             .Concat(Enumerable.Range(0, height).Select(y => y * Width + Width - 1));
@@ -116,16 +112,15 @@ public sealed class CyberspaceGenerationTest
     [Test]
     public void SameGraphSameTilesAndStylesVary()
     {
-        var layout = Layout();
-        var graph = Graph(layout);
-        var first = CyberRegionGenerator.Generate(3, layout, graph);
-        var second = CyberRegionGenerator.Generate(3, layout, graph);
+        var graph = Graph();
+        var first = CyberRegionGenerator.Generate(3, Shape, graph);
+        var second = CyberRegionGenerator.Generate(3, Shape, graph);
         Assert.That(second, Is.EqualTo(first));
 
         var sizes = new HashSet<int>();
         for (var seed = 0UL; seed < 20; seed++)
         {
-            var tiles = CyberRegionGenerator.Generate(seed, layout, graph);
+            var tiles = CyberRegionGenerator.Generate(seed, Shape, graph);
             Assert.That(tiles.Any(CyberLayout.Walkable));
             sizes.Add(tiles.Count(t => t == CyberFloor.Data));
         }
@@ -136,85 +131,106 @@ public sealed class CyberspaceGenerationTest
     [Test]
     public void RemovingALinkRemovesItsCorridor()
     {
-        var layout = Layout();
-        var graph = Graph(layout);
-        var cut = Graph(layout);
+        var graph = Graph();
+        var cut = Graph();
         cut.Links.Remove((2, 6));
-        var tiles = CyberRegionGenerator.Generate(1, layout, cut);
+        var tiles = CyberRegionGenerator.Generate(1, Shape, cut);
         var reached = Flood(tiles, Width, Centre(graph.Pads[0].Slot));
         Assert.That(reached[Centre(graph.Pads[6].Slot)], Is.False);
         Assert.That(reached[Centre(graph.Pads[4].Slot)]);
     }
 
+    /// <summary>
+    /// A full subnet fits in one region, and every host on it is joined to the router.
+    /// </summary>
     [Test]
-    public void RegionsAndTheHubTileTheLevelApart()
+    public void ARegionHoldsAFullSubnet()
     {
-        var layout = new CyberLayout(20, 20);
-        var (w, h) = layout.Size;
-        var tiles = layout.Base();
-        Assert.That(tiles, Has.Length.EqualTo(w * h));
-        var hub = layout.HubRect;
-        for (var r = 0; r < layout.Regions; r++)
+        var shape = RegionShape.For(253, 4);
+        Assert.That(shape.Fits(253, 4));
+        Assert.That(shape.HostSlots.Distinct().Count(), Is.EqualTo(shape.HostSlots.Count));
+
+        var graph = new RegionGraph { Pads = { (shape.RouterSlot, PadKind.Router) }, Gate = 0 };
+        for (var i = 0; i < 4; i++)
         {
-            var rect = layout.RegionRect(r);
-            Assert.That(rect.X + rect.W < w && rect.Y + rect.H < h);
-            Assert.That(rect.X == hub.X && rect.Y == hub.Y, Is.False);
-
-            // Above each region's router is the bus.
-            var (x, _) = layout.SlotCentre(r, layout.RouterSlot);
-            Assert.That(tiles[(rect.Y + rect.H) * w + x], Is.EqualTo(CyberFloor.Bus));
-
-            // Inside, nothing yet.
-            Assert.That(Walkable(tiles, (rect.Y + 2) * w + rect.X + 2), Is.False);
+            graph.Pads.Add((shape.SwitchSlots[i], PadKind.Switch));
+            graph.Links.Add((0, i + 1));
         }
 
-        // The bus all joins up, with the hub.
-        var reached = Flood(tiles, w, (hub.Y + 2) * w + hub.X + 2);
-        for (var i = 0; i < tiles.Length; i++)
+        for (var i = 0; i < 253; i++)
         {
-            Assert.That(!Walkable(tiles, i) || reached[i], $"tile {i % w}, {i / w}");
+            graph.Pads.Add((shape.HostSlots[i], PadKind.Host));
+            graph.Links.Add((1 + i % 4, graph.Pads.Count - 1));
         }
 
-        Assert.That(layout.HostSlots, Has.Count.GreaterThanOrEqualTo(20));
+        var width = shape.Width * CyberLayout.Cell;
+        var tiles = CyberRegionGenerator.Generate(5, shape, graph);
+        int At((int X, int Y) slot) => (slot.Y * CyberLayout.Cell + 2) * width + slot.X * CyberLayout.Cell + 2;
+        var reached = Flood(tiles, width, At(shape.RouterSlot));
+        foreach (var (slot, _) in graph.Pads)
+        {
+            Assert.That(reached[At(slot)], $"slot {slot}");
+        }
+    }
+
+    /// <summary>
+    /// Regions go along the street nearest the hub first, each touching the street and none overlapping, and a
+    /// region given back leaves a gap for the next that fits.
+    /// </summary>
+    [Test]
+    public void RegionsLineTheStreet()
+    {
+        var layout = new CyberLayout();
+        var shapes = new[] { RegionShape.Smallest, RegionShape.For(253, 1), RegionShape.For(30, 3), RegionShape.Smallest, RegionShape.For(80, 2), RegionShape.Smallest };
+        var placed = shapes.Select(layout.Place).ToList();
+
+        var all = placed.Append(CyberLayout.HubCells).ToList();
+        for (var i = 0; i < all.Count; i++)
+        {
+            for (var j = i + 1; j < all.Count; j++)
+            {
+                Assert.That(Apart(all[i], all[j]), $"{all[i]} overlaps {all[j]}");
+            }
+        }
+
+        foreach (var cells in placed)
+        {
+            Assert.That(CyberLayout.Above(cells) ? cells.Y == 1 : cells.Y + cells.H == 0, $"{cells} is off the street");
+            Assert.That(cells.X >= layout.StreetWest && cells.X + cells.W - 1 <= layout.StreetEast);
+        }
+
+        // The first four take the four spots beside the hub.
+        Assert.That(placed.Take(4).Select(c => (c.X > 0, CyberLayout.Above(c))).Distinct().Count(), Is.EqualTo(4));
+
+        layout.Free(placed[0]);
+        Assert.That(layout.Place(RegionShape.Smallest), Is.EqualTo(placed[0]), "a gap is filled again");
     }
 
     [Test]
     public void PracticeRegionsAreCutOff()
     {
-        var layout = new CyberLayout(6, 10, 3);
-        var (w, h) = layout.Size;
-        var tiles = layout.Base();
-        var hub = layout.HubRect;
-        var reached = Flood(tiles, w, (hub.Y + 2) * w + hub.X + 2);
-        for (var s = layout.Regions; s < layout.AllRegions; s++)
+        var layout = new CyberLayout();
+        var network = layout.Place(RegionShape.For(253, 8));
+        for (var s = 0; s < 8; s++)
         {
-            var rect = layout.RegionRect(s);
-            Assert.That(rect.X + rect.W < w && rect.Y + rect.H < h, $"{rect}");
-            for (var r = 0; r < layout.AllRegions; r++)
+            var cells = CyberLayout.PracticeCells(s);
+            Assert.That(Apart(Grow(cells), network) && Apart(Grow(cells), CyberLayout.HubCells));
+            for (var t = s + 1; t < 8; t++)
             {
-                if (r == s)
-                    continue;
-
-                var other = layout.RegionRect(r);
-                var apart = rect.X + rect.W <= other.X
-                            || other.X + other.W <= rect.X
-                            || rect.Y + rect.H <= other.Y
-                            || other.Y + other.H <= rect.Y;
-
-                Assert.That(apart, $"{s} overlaps {r}");
-            }
-
-            // Nothing walkable around it, so nothing reaches it.
-            for (var x = rect.X - 1; x <= rect.X + rect.W; x++)
-            {
-                foreach (var y in new[] { rect.Y - 1, rect.Y + rect.H })
-                {
-                    var i = y * w + x;
-                    Assert.That(Walkable(tiles, i), Is.False);
-                    Assert.That(reached[i], Is.False);
-                }
+                Assert.That(Apart(Grow(cells), CyberLayout.PracticeCells(t)), $"{s} touches {t}");
             }
         }
+    }
+
+    /// <summary>A rectangle with a cell more all round.</summary>
+    private static CyberRect Grow(CyberRect r)
+    {
+        return new CyberRect(r.X - 1, r.Y - 1, r.W + 2, r.H + 2);
+    }
+
+    private static bool Apart(CyberRect a, CyberRect b)
+    {
+        return a.X + a.W <= b.X || b.X + b.W <= a.X || a.Y + a.H <= b.Y || b.Y + b.H <= a.Y;
     }
 
     /// <summary>
