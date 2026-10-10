@@ -43,7 +43,8 @@ public sealed class LineEditor
             case TerminalKeys.Backspace:
                 if (_line.Length > 0)
                 {
-                    _line.Length -= char.IsLowSurrogate(_line[^1]) ? 2 : 1;
+                    var width = char.IsLowSurrogate(_line[^1]) ? 2 : 1;
+                    _line.Remove(_line.Length - width, width);
                     _screen.Append(TerminalText.Backspace);
                 }
 
