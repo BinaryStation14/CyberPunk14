@@ -742,6 +742,231 @@ public sealed class CyberspaceTest : GameTest
     }
 
     /// <summary>
+    /// A computer's program puts ICE on its pad. A runner's blade derezzes it and halts the program; ICE left
+    /// to it engages a runner it sees and strikes them out of cyberspace.
+    /// </summary>
+    [Test]
+    public async Task IceGuardsNetworks()
+    {
+        var server = Pair.Server;
+        _entMan = server.ResolveDependency<IEntityManager>();
+        var machines = _entMan.System<WasmMachineSystem>();
+        var cyberspace = _entMan.System<CyberspaceSystem>();
+        var mapSys = _entMan.System<SharedMapSystem>();
+        var power = _entMan.System<SharedPowerReceiverSystem>();
+        var minds = _entMan.System<SharedMindSystem>();
+        var hands = _entMan.System<SharedHandsSystem>();
+        var godmode = _entMan.System<SharedGodmodeSystem>();
+        var interaction = _entMan.System<SharedInteractionSystem>();
+        var access = _entMan.System<AccessReaderSystem>();
+
+        EntityUid guard = default, accessPoint = default, runner = default, deck = default;
+        await server.WaitAssertion(() =>
+        {
+            mapSys.CreateMap(out var mapId);
+            _grid = mapSys.CreateGridEntity(mapId);
+            for (var x = 0; x < 6; x++)
+            {
+                for (var y = 0; y < 3; y++)
+                {
+                    mapSys.SetTile(_grid, new Vector2i(x, y), new Tile(1));
+                }
+
+                Place("CableData", x, 0);
+            }
+
+            guard = Place("ComputerProgrammable", 5, 0);
+            accessPoint = Place("AccessPoint", 3, 0);
+            var router = Place("NetworkRouter", 1, 1);
+            foreach (var ent in new[] { guard, accessPoint, router })
+            {
+                power.SetNeedsPower(ent, false);
+            }
+
+            var reader = _entMan.EnsureComponent<AccessReaderComponent>(guard);
+            access.TryAddAccess((guard, reader), "Captain");
+
+            (runner, deck) = Runner(minds, hands, godmode, 3, 1);
+        });
+
+        await Pair.RunTicksSync(30);
+
+        EntityUid avatar = default;
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(cyberspace.TryJackIn(runner, deck, accessPoint, true));
+            Assert.That(cyberspace.IsJackedIn(runner, out var a));
+            avatar = a!.Value;
+            machines.TypeLine((guard, _entMan.GetComponent<WasmMachineComponent>(guard)), "run ice_basic &");
+            machines.TypeLine((avatar, _entMan.GetComponent<WasmMachineComponent>(avatar)), "hold blade");
+        });
+
+        await Pair.RunTicksSync(30);
+
+        EntityUid ice = default;
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(_entMan.GetComponent<WasmMachineComponent>(guard).Screen,
+                Does.Contain("[ice: in cyberspace, guarding this network]"));
+            ice = IceOf(guard);
+            Assert.That(ice, Is.Not.EqualTo(EntityUid.Invalid), "ICE stands guard");
+
+            Stand(avatar, ice);
+            var blade = hands.EnumerateHeld(avatar).First(e => _entMan.HasComponent<CyberProgramComponent>(e));
+            interaction.InteractDoAfter(avatar, blade, ice, _entMan.GetComponent<TransformComponent>(ice).Coordinates, true);
+        });
+
+        await Pair.RunTicksSync(90);
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(_entMan.EntityExists(ice), Is.False, "four strikes derez it");
+            Assert.That(_entMan.GetComponent<WasmMachineComponent>(guard).Screen, Does.Contain("its ICE was derezzed by"));
+            machines.TypeLine((guard, _entMan.GetComponent<WasmMachineComponent>(guard)), "run ice_basic &");
+        });
+
+        await Pair.RunTicksSync(30);
+        await server.WaitAssertion(() =>
+        {
+            ice = IceOf(guard);
+            Assert.That(ice, Is.Not.EqualTo(EntityUid.Invalid));
+            Stand(avatar, ice);
+        });
+
+        await Pair.RunTicksSync(300);
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(cyberspace.IsJackedIn(runner, out _), Is.False, "the ICE threw them out");
+            Assert.That(cyberspace.TryJackIn(runner, deck, accessPoint, true), Is.False, "dumpshock");
+            Assert.That(_entMan.EntityExists(ice), "the ICE stays");
+        });
+    }
+
+    /// <summary>
+    /// A firewall between the router and a computer shuts the only way to the computer's pad, until a runner whose
+    /// ID it doesn't pass breaches it.
+    /// </summary>
+    [Test]
+    public async Task FirewallsShutTheWayPast()
+    {
+        var server = Pair.Server;
+        _entMan = server.ResolveDependency<IEntityManager>();
+        var cyberspace = _entMan.System<CyberspaceSystem>();
+        var mapSys = _entMan.System<SharedMapSystem>();
+        var power = _entMan.System<SharedPowerReceiverSystem>();
+        var minds = _entMan.System<SharedMindSystem>();
+        var hands = _entMan.System<SharedHandsSystem>();
+        var godmode = _entMan.System<SharedGodmodeSystem>();
+        var interaction = _entMan.System<SharedInteractionSystem>();
+        var access = _entMan.System<AccessReaderSystem>();
+
+        EntityUid router = default, firewall = default, inside = default, outside = default;
+        EntityUid accessPoint = default, runner = default, deck = default;
+        await server.WaitAssertion(() =>
+        {
+            mapSys.CreateMap(out var mapId);
+            _grid = mapSys.CreateGridEntity(mapId);
+            for (var x = 0; x < 7; x++)
+            {
+                for (var y = 0; y < 3; y++)
+                {
+                    mapSys.SetTile(_grid, new Vector2i(x, y), new Tile(1));
+                }
+
+                // The firewall's tile has no cable: it joins the cable on either side.
+                if (x != 3)
+                    Place("CableData", x, 0);
+            }
+
+            router = Place("NetworkRouter", 0, 1);
+            outside = Place("ComputerProgrammable", 1, 0);
+            accessPoint = Place("AccessPoint", 2, 0);
+            firewall = Place("NetworkFirewall", 3, 0);
+            inside = Place("ComputerProgrammable", 5, 0);
+            foreach (var ent in new[] { router, outside, accessPoint, firewall, inside })
+            {
+                power.SetNeedsPower(ent, false);
+            }
+
+            access.TryAddAccess((firewall, _entMan.GetComponent<AccessReaderComponent>(firewall)), "Captain");
+            (runner, deck) = Runner(minds, hands, godmode, 2, 1);
+        });
+
+        await Pair.RunTicksSync(30);
+
+        EntityUid gate = default, avatar = default;
+        await server.WaitAssertion(() =>
+        {
+            gate = cyberspace.NodeOf(firewall)!.Value;
+            Assert.That(_entMan.GetComponent<CyberNodeComponent>(gate).Kind, Is.EqualTo(CyberNodeKind.Firewall));
+            Assert.That(_entMan.HasComponent<CyberFirewallGateComponent>(gate));
+
+            var centre = Tile(gate);
+            var pad = new HashSet<Vector2i>();
+            for (var dy = -1; dy <= 1; dy++)
+            {
+                for (var dx = -1; dx <= 1; dx++)
+                {
+                    pad.Add(centre + new Vector2i(dx, dy));
+                }
+            }
+
+            var from = Tile(cyberspace.NodeOf(router)!.Value);
+            Assert.That(Reaches(cyberspace, from, Tile(cyberspace.NodeOf(inside)!.Value)), "the way leads across the firewall");
+            Assert.That(Reaches(cyberspace, from, Tile(cyberspace.NodeOf(inside)!.Value), pad), Is.False,
+                "and nowhere else");
+            Assert.That(Reaches(cyberspace, from, Tile(cyberspace.NodeOf(outside)!.Value), pad));
+
+            Assert.That(cyberspace.TryJackIn(runner, deck, accessPoint, true));
+            Assert.That(cyberspace.IsJackedIn(runner, out var a));
+            avatar = a!.Value;
+
+            // Up to the firewall from the router's side, at the end of the path into its pad.
+            var side = new[] { new Vector2i(0, 2), new Vector2i(2, 0), new Vector2i(0, -2), new Vector2i(-2, 0) }
+                .Select(step => centre + step)
+                .First(tile => CyberLayout.Walkable(cyberspace.FloorAt(tile.X, tile.Y)) && Reaches(cyberspace, from, tile, pad));
+            var xforms = _entMan.System<SharedTransformSystem>();
+            xforms.SetCoordinates(avatar, new EntityCoordinates(cyberspace.MapUid!.Value, side.X + 0.5f, side.Y + 0.5f));
+        });
+
+        await Pair.RunTicksSync(2);
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(_entMan.GetComponent<CyberFirewallGateComponent>(gate).Passes, Does.Not.Contain(avatar),
+                "shut to a runner without the card");
+            interaction.InteractionActivate(avatar, gate);
+        });
+
+        await Pair.RunTicksSync(120);
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(_entMan.GetComponent<CyberFirewallGateComponent>(gate).Passes, Does.Contain(avatar),
+                "breached, it lets them through");
+            cyberspace.JackOut(runner, "", false);
+        });
+
+        await Pair.RunTicksSync(2);
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(_entMan.GetComponent<CyberFirewallGateComponent>(gate).Passes, Is.Empty, "shut again once they leave");
+        });
+    }
+
+    /// <summary>
+    /// The ICE a computer's program runs, or none.
+    /// </summary>
+    private EntityUid IceOf(EntityUid computer)
+    {
+        var query = _entMan.EntityQueryEnumerator<IceComponent>();
+        while (query.MoveNext(out var uid, out var ice))
+        {
+            if (ice.Computer == computer)
+                return uid;
+        }
+
+        return EntityUid.Invalid;
+    }
+
+    /// <summary>
     /// Puts a runner's virtual body on a node.
     /// </summary>
     private void Stand(EntityUid avatar, EntityUid node)
@@ -782,9 +1007,10 @@ public sealed class CyberspaceTest : GameTest
     }
 
     /// <summary>
-    /// Whether one tile of cyberspace can be walked to from another.
+    /// Whether one tile of cyberspace can be walked to from another, without crossing any tile of
+    /// <paramref name="blocked"/>.
     /// </summary>
-    private static bool Reaches(CyberspaceSystem cyberspace, Vector2i from, Vector2i to)
+    private static bool Reaches(CyberspaceSystem cyberspace, Vector2i from, Vector2i to, HashSet<Vector2i>? blocked = null)
     {
         var seen = new HashSet<Vector2i> { from };
         var queue = new Queue<Vector2i>();
@@ -797,7 +1023,7 @@ public sealed class CyberspaceTest : GameTest
             foreach (var step in new[] { new Vector2i(0, 1), new Vector2i(1, 0), new Vector2i(0, -1), new Vector2i(-1, 0) })
             {
                 var next = at + step;
-                if (CyberLayout.Walkable(cyberspace.FloorAt(next.X, next.Y)) && seen.Add(next))
+                if (CyberLayout.Walkable(cyberspace.FloorAt(next.X, next.Y)) && blocked?.Contains(next) != true && seen.Add(next))
                     queue.Enqueue(next);
             }
         }

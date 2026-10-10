@@ -80,7 +80,7 @@ public static class WireLibrary
         new("sys.man", "sys.man() / sys.man(topic)", 0, 1, null,
             "A manual page as text (the list of pages without a topic), or None if there's no such page."),
         new("sys.scaffold", "sys.scaffold(kind)", 1, 1, null,
-            "A Wire program to start from, as text, for a kind of machine (\"computer\", \"door\", \"camera\", \"ice\", \"deck\" or \"implant\"), the operating system's own source for \"os\", or nano's for \"nano\". None for anything else."),
+            "A Wire program to start from, as text, for a kind of machine (\"computer\", \"door\", \"camera\", \"ice\", \"deck\" or \"implant\"), the operating system's own source for \"os\", or that of a program that comes with it (\"nano\", \"blade\", \"ward\" or \"ice_basic\"). None for anything else."),
         new("sys.build", "sys.build(source, program)", 2, 2, "computer",
             "Builds a source file (Wire, or WAT if its name ends in .wat; 64 KiB at most) into a program file. The program's size in bytes, or None if it doesn't build (sys.error() says why, with the line)."),
         new("sys.flash", "sys.flash(address, program)", 2, 2, "computer",

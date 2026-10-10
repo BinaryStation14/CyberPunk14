@@ -16,9 +16,19 @@ public sealed record RegionGraph
     /// <summary>The pad (a router) whose top side opens onto the bus, if any.</summary>
     public int? Gate;
 
+    /// <summary>
+    /// Which side of the firewalls each pad is on, a firewall's own being -1. Corridors on different sides
+    /// never share a cell, so the only way from one side to the other is across a firewall's pad. Null for no
+    /// firewalls.
+    /// </summary>
+    public List<int>? Zones;
+
     public bool Same(RegionGraph other)
     {
-        return Pads.SequenceEqual(other.Pads) && Links.SequenceEqual(other.Links) && Gate == other.Gate;
+        return Pads.SequenceEqual(other.Pads)
+               && Links.SequenceEqual(other.Links)
+               && Gate == other.Gate
+               && (Zones ?? []).SequenceEqual(other.Zones ?? []);
     }
 }
 
@@ -104,8 +114,8 @@ public static class CyberRegionGenerator
     }
 
     /// <summary>
-    /// Routes every link as a corridor of cells from pad to pad, around other pads. Returns the sides each
-    /// cell's paths leave by.
+    /// Routes every link as a corridor of cells from pad to pad, around other pads and the corridors on the other
+    /// side of a firewall. Returns the sides each cell's paths leave by.
     /// </summary>
     private static Dictionary<(int, int), bool[]> Route(int width, int height, RegionGraph graph)
     {
@@ -124,11 +134,19 @@ public static class CyberRegionGenerator
             SidesOf(slot);
         }
 
-        foreach (var (a, b) in graph.Links)
+        // The cells each side's corridors run through.
+        var sideOf = new Dictionary<(int, int), int>();
+        for (var link = 0; link < graph.Links.Count; link++)
         {
+            var (a, b) = graph.Links[link];
             var (from, to) = (graph.Pads[a].Slot, graph.Pads[b].Slot);
             if (from == to)
                 continue;
+
+            // A link between two firewalls is a side of its own.
+            var zone = graph.Zones is { } zones
+                ? zones[a] >= 0 ? zones[a] : zones[b] >= 0 ? zones[b] : -2 - link
+                : 0;
 
             // Breadth first from `from`, through cells that aren't pads.
             var came = new Dictionary<(int, int), (int, int)>();
@@ -152,6 +170,9 @@ public static class CyberRegionGenerator
                     if (n == from || came.ContainsKey(n) || pads.Contains(n) && n != to)
                         continue;
 
+                    if (sideOf.TryGetValue(n, out var side) && side != zone)
+                        continue;
+
                     came[n] = at;
                     queue.Enqueue(n);
                 }
@@ -167,6 +188,9 @@ public static class CyberRegionGenerator
                 var d = Array.FindIndex(WfcWave.Directions, dir => prev.Item1 + dir.X == back.Item1 && prev.Item2 + dir.Y == back.Item2);
                 SidesOf(prev)[d] = true;
                 SidesOf(back)[WfcWave.Opposite(d)] = true;
+                if (!pads.Contains(back))
+                    sideOf[back] = zone;
+
                 back = prev;
             }
         }

@@ -317,8 +317,9 @@ public static class WireManual
         # ICE can do.
         #
         # The ICE lasts as long as this program runs. If a runner beats it, the
-        # program is halted, and someone has to run it again; or keep it running
-        # with a keeper (see examples/ice_keeper.wire on a deck).
+        # program is halted, and someone has to run it again. A computer's
+        # autorun file can run it at boot; `new NAME ice_basic` copies the ICE
+        # that comes with every computer.
 
         # Code at the top level runs once: this puts the ICE in cyberspace, on
         # this computer's pad. It arrives in time for the first tick.
