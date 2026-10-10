@@ -302,6 +302,12 @@ public sealed partial class CyberspaceSystem
             return false;
 
         _rejuvenate.PerformRejuvenate(avatar);
+        if (TryComp<CyberAvatarComponent>(avatar, out var comp))
+        {
+            comp.Integrity = MaxIntegrity;
+            comp.StrikeReadyAt = comp.WardUntil = comp.WardReadyAt = TimeSpan.Zero;
+        }
+
         _transform.SetCoordinates(avatar, at);
         _transform.AttachToGridOrMap(avatar);
         if (TryComp<WasmMachineComponent>(avatar, out var machine))
@@ -329,6 +335,7 @@ public sealed partial class CyberspaceSystem
 
             DetachSpur(avatar);
             _machines.SetVirtualHost(avatar, null);
+            _machines.SetDeckView(avatar, null);
             if (TryComp<WasmMachineComponent>(avatar, out var machine))
                 _machines.SetRunning((avatar, machine), false);
 
@@ -461,6 +468,7 @@ public sealed partial class CyberspaceSystem
     {
         base.Update(frameTime);
         TendRunners();
+        TendDecks();
         MirrorIds();
         TendRemoteUis();
     }

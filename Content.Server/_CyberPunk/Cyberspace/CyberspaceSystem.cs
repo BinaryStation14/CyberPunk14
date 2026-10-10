@@ -118,11 +118,14 @@ public sealed partial class CyberspaceSystem : EntitySystem
     public override void Initialize()
     {
         base.Initialize();
+        // Decks see where everyone is before their programs run.
+        UpdatesBefore.Add(typeof(WasmMachineSystem));
         SubscribeLocalEvent<MachineNetworksRebuiltEvent>(OnNetworksRebuilt);
         SubscribeLocalEvent<RoundRestartCleanupEvent>(OnRoundRestart);
         InitializeAvatars();
         InitializeRunners();
         InitializeNodes();
+        InitializeDeck();
     }
 
     private void OnRoundRestart(RoundRestartCleanupEvent ev)

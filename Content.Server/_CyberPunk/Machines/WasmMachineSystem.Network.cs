@@ -485,6 +485,14 @@ public sealed partial class WasmMachineSystem
     }
 
     /// <summary>
+    /// The machine with an address, if one has it.
+    /// </summary>
+    public EntityUid? MachineAt(uint address)
+    {
+        return _addresses.TryGetValue(address, out var at) ? at.Machine : null;
+    }
+
+    /// <summary>
     /// The address a machine has, if it's on a working network.
     /// </summary>
     public uint? AddressOf(EntityUid machine)

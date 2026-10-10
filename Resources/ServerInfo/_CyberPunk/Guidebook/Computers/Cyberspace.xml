@@ -14,7 +14,16 @@
   - Use the deck in your hand instead to raise a [bold]practice grid[/bold]: a network of your own, with a training server, that nobody else can reach.
 
   ## Your deck
-  Your virtual body is a computer, your deck, with an address on the network you came in through ([mono]ip[/mono] shows it). Its disk keeps its files between runs. Open its terminal from the action bar. Type [mono]colour #4de6ff[/mono] in it to change the colour you show in; anyone at your deck's terminal can change it too. Another runner who breaches your deck's node opens its terminal, files and all.
+  Your virtual body is a computer, your deck, with an address on the network you came in through ([mono]ip[/mono] shows it). Its disk keeps its files between runs. Open its terminal from the action bar. Type [mono]colour #4de6ff[/mono] in it to change the colour you show in; anyone at your deck's terminal can change it too. Another runner who breaches your deck's node opens its terminal, files and all. It comes with the same examples as a programmable computer.
+
+  ## Programs in hand
+  Type [mono]hold FILE[/mono] at your deck to put a program in your virtual hand. Use it in your hand to run it on your deck, or use it on another runner to run it at them. Drop it and it's gone, though the file stays on your deck. Only one held program runs at a time.
+  - [mono]hold blade[/mono]: your deck's weapon. Each strike takes a quarter of a runner's [bold]integrity[/bold] (an eighth through a ward), every two-thirds of a second, within reach. At none left they're cut out of cyberspace, with dumpshock. It doesn't move you, so walk into reach yourself.
+  - [mono]hold ward[/mono]: halves the strikes on you for two seconds, and can go up again six seconds later.
+  - Write your own with [mono]new NAME deck[/mono], and read blade's or ward's with [mono]new NAME blade[/mono]. [mono]man deck[/mono] lists what a deck's programs can do.
+
+  ## Pushing files
+  [mono]push FILE[/mono] copies a file from your deck onto the computer whose node you stand at, once its lock lets you (it's nobody's, your ID opens it, or you've breached it). [mono]push ADDR FILE[/mono] copies it over the network to a computer your ID opens. It lands under its own name, out of any folder.
 
   ## Using machines
   Use a machine's node to open it, as if you stood at the machine itself: a computer's terminal, a vending machine's stock, an air alarm's settings. You wear a [bold]proxy ID[/bold] that opens whatever the ID your real body wears opens. A machine your ID doesn't open is locked: stand at its node for three seconds to [bold]breach[/bold] it, and it stays breached until you jack out. Walk away from the node and the machine closes.

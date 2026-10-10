@@ -206,7 +206,7 @@ public static class WireLibrary
         new("deck.targets", "deck.targets()", 0, 0, "deck",
             "The ICE and runners the deck can see (along a clear path, within 9 tiles), nearest first. Each has .id, .ice (True for ICE), .name, .integrity, .in_reach and .distance (in tiles)."),
         new("deck.strike", "deck.strike(target)", 1, 1, "deck",
-            "Strikes ICE or a runner in reach (by .id) for a fifth of its integrity; at none ICE derezzes and a runner is thrown out. Every 0.8 seconds at most. False if out of reach or not ready."),
+            "Strikes ICE or a runner in reach (by .id) for a quarter of its integrity (an eighth through a ward); at none ICE derezzes and a runner is thrown out. Every two-thirds of a second at most. False if out of reach or not ready."),
         new("deck.ward", "deck.ward()", 0, 0, "deck",
             "Raises a ward: strikes on the runner are halved for 2 seconds. Every 6 seconds at most. False if not ready."),
         new("deck.hold", "deck.hold(file)", 1, 1, "deck",

@@ -1,0 +1,43 @@
+# blade: the deck's weapon, which comes with every deck. Hold it (`hold
+# blade`), then use it on ICE or another runner to go for them, or in your
+# hand to go for the nearest ICE. It strikes whenever its target is in reach
+# and the deck is ready, and gives up once the target has been out of sight
+# for a while. It never moves you: walk into reach yourself.
+#
+# It is a Wire program like any other: `new myblade blade` copies it to change.
+
+PATIENCE = 3000      # milliseconds out of sight before it gives up
+
+target = None
+seen = sys.clock()
+
+def find(id):
+    for t in deck.targets():
+        if t.id == id:
+            return t
+    return None
+
+if deck.integrity() == None:
+    print("blade: only runs on a deck in cyberspace")
+    sys.exit(1)
+else:
+    target = int(sys.args().strip())
+    if target == None:
+        for t in deck.targets():
+            if t.ice and target == None:
+                target = t.id
+    if target == None:
+        print("blade: nothing to strike in sight")
+        sys.exit()
+    else:
+        print("blade: going for " + str(target))
+
+def tick():
+    t = find(target)
+    if t != None:
+        seen = sys.clock()
+        if t.in_reach:
+            deck.strike(target)
+    elif sys.clock() - seen > PATIENCE:
+        print("blade: " + str(target) + " is gone")
+        sys.exit()

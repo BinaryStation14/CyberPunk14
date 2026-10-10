@@ -1,5 +1,6 @@
 using Content.Server._CyberPunk.Wasm;
 using Content.Shared._CyberPunk.Machines;
+using Robust.Shared.Prototypes;
 using Robust.Shared.Serialization.Manager.Attributes;
 
 namespace Content.Server._CyberPunk.Machines;
@@ -23,6 +24,12 @@ public sealed partial class WasmMachineComponent : Component
     /// </summary>
     [DataField, AlwaysPushInheritance]
     public Dictionary<string, string> Files = new();
+
+    /// <summary>
+    /// A machine whose files it starts with too, under its own: a deck gets a programmable computer's examples.
+    /// </summary>
+    [DataField]
+    public EntProtoId? FilesFrom;
 
     /// <summary>
     /// The name it goes by on the network, which its router publishes. Its programs can change it.
