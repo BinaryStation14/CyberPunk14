@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Numerics;
 using Content.Server._CyberPunk.Machines;
+using Content.Server._CyberPunk.Procgen;
 using Content.Server._CyberPunk.Wasm;
 using Content.Shared.GameTicking;
 using Content.Shared.Gravity;

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Content.Server._CyberPunk.Cyberspace;
+using Content.Server._CyberPunk.Procgen;
 using NUnit.Framework;
 
 #nullable enable
@@ -56,7 +57,7 @@ public sealed class CyberspaceGenerationTest
         while (queue.TryDequeue(out var i))
         {
             var (x, y) = (i % width, i / width);
-            foreach (var (dx, dy) in CyberRegionGenerator.Directions)
+            foreach (var (dx, dy) in WfcWave.Directions)
             {
                 var (nx, ny) = (x + dx, y + dy);
                 if (nx < 0 || ny < 0 || nx >= width || ny >= height)
