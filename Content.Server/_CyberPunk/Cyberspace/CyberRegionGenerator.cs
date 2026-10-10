@@ -125,12 +125,11 @@ public static class CyberRegionGenerator
             return s;
         }
 
-        foreach (var (slot, _) in graph.Pads)
+        var pads = graph.Pads.Select(p => p.Slot).ToHashSet();
+        foreach (var slot in pads)
         {
             SidesOf(slot);
         }
-
-        bool PadAt((int, int) cell) => graph.Pads.Any(p => p.Slot == cell);
 
         foreach (var (a, b) in graph.Links)
         {
@@ -157,7 +156,7 @@ public static class CyberRegionGenerator
                     if (n.Item1 < 0 || n.Item2 < 0 || n.Item1 >= width || n.Item2 >= height)
                         continue;
 
-                    if (n == from || came.ContainsKey(n) || PadAt(n) && n != to)
+                    if (n == from || came.ContainsKey(n) || pads.Contains(n) && n != to)
                         continue;
 
                     came[n] = at;
@@ -183,12 +182,12 @@ public static class CyberRegionGenerator
     }
 
     /// <summary>
-    /// Generates a region's tiles from its network, row by row from the bottom,
-    /// <c>RegionWidth * Cell</c> across.
+    /// Generates a region's tiles from its network, row by row from the bottom, the shape's width in cells
+    /// across.
     /// </summary>
-    public static CyberFloor[] Generate(ulong seed, CyberLayout layout, RegionGraph graph)
+    public static CyberFloor[] Generate(ulong seed, RegionShape shape, RegionGraph graph)
     {
-        var (w, h) = (CyberLayout.RegionWidth, layout.RegionHeight);
+        var (w, h) = (shape.Width, shape.Height);
         var sides = Route(w, h, graph);
         if (graph.Gate is { } gate)
         {
@@ -199,7 +198,8 @@ public static class CyberRegionGenerator
             s[0] = true;
         }
 
-        bool IsPad((int, int) cell) => graph.Pads.Any(p => p.Slot == cell);
+        var pads = graph.Pads.Select(p => p.Slot).ToHashSet();
+        bool IsPad((int, int) cell) => pads.Contains(cell);
         (int, int)? gateCell = graph.Gate is { } g ? graph.Pads[g].Slot : null;
 
         bool[] Want((int, int) cell) => sides.TryGetValue(cell, out var s) ? s : new bool[4];

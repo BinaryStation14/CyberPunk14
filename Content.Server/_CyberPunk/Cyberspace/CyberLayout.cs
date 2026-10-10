@@ -34,7 +34,7 @@ public enum PadKind : byte
 }
 
 /// <summary>
-/// A rectangle of tiles, from its bottom-left corner.
+/// A rectangle, from its bottom-left corner.
 /// </summary>
 public readonly record struct CyberRect(int X, int Y, int W, int H)
 {
@@ -45,169 +45,180 @@ public readonly record struct CyberRect(int X, int Y, int W, int H)
 }
 
 /// <summary>
-/// The fixed shape of cyberspace, after Switchboard's <c>sb_procgen/src/cyberspace.rs</c>: a lattice of cells
-/// <see cref="Cell"/> tiles square, where each network has a region of cells, the same size for all, set out in
-/// a grid with the backbone's hub in the middle. Between the regions run the bus's streets, one cell wide, all
-/// joined to the hub. Beyond them, in a band of their own with void all round, are the practice regions. The
-/// layout never changes once made, so a region keeps its place as its network changes.
+/// The size of a region, in slots: columns of slots two cells apart, rows of hosts at the bottom, rows of
+/// switches above them and the router at the top, where it opens onto the bus. Slots are in cells of the
+/// region, x to the right and y up.
+/// </summary>
+public sealed record RegionShape(int Columns, int HostRows, int SwitchRows)
+{
+    /// <summary>The smallest region: a practice grid, or a network of a few machines.</summary>
+    public static readonly RegionShape Smallest = new(5, 2, 1);
+
+    /// <summary>
+    /// A region with room for a network's hosts and switches, and a quarter as many hosts again (at least three)
+    /// to grow into, roughly square.
+    /// </summary>
+    public static RegionShape For(int hosts, int switches)
+    {
+        var need = hosts + Math.Max(3, hosts / 4);
+        var columns = Math.Max(Smallest.Columns, (int) Math.Ceiling(Math.Sqrt(need)));
+        var hostRows = Math.Max(Smallest.HostRows, (need + columns - 1) / columns);
+        var switchRows = Math.Max(Smallest.SwitchRows, (switches + columns - 1) / columns);
+        return new RegionShape(columns, hostRows, switchRows);
+    }
+
+    public bool Fits(int hosts, int switches)
+    {
+        return hosts <= Columns * HostRows && switches <= Columns * SwitchRows;
+    }
+
+    /// <summary>Width in cells.</summary>
+    public int Width => 2 * Columns - 1;
+
+    /// <summary>Height in cells.</summary>
+    public int Height => 2 * (HostRows + SwitchRows) + 1;
+
+    /// <summary>Slot columns, in the order they fill: from the middle out.</summary>
+    private IEnumerable<int> ColumnOrder()
+    {
+        var middle = Columns / 2;
+        yield return 2 * middle;
+        for (var step = 1; step <= middle || middle + step < Columns; step++)
+        {
+            if (middle - step >= 0)
+                yield return 2 * (middle - step);
+            if (middle + step < Columns)
+                yield return 2 * (middle + step);
+        }
+    }
+
+    /// <summary>The router's slot: the middle of the top row, by the bus.</summary>
+    public (int X, int Y) RouterSlot => (2 * (Columns / 2), Height - 1);
+
+    /// <summary>Switch slots, top row first, in the order they fill.</summary>
+    public List<(int X, int Y)> SwitchSlots =>
+        Enumerable.Range(0, SwitchRows)
+            .SelectMany(row => ColumnOrder().Select(x => (x, Height - 3 - 2 * row)))
+            .ToList();
+
+    /// <summary>Host slots, top row first, each row from the middle out.</summary>
+    public List<(int X, int Y)> HostSlots =>
+        Enumerable.Range(0, HostRows)
+            .SelectMany(row => ColumnOrder().Select(x => (x, 2 * (HostRows - 1 - row))))
+            .ToList();
+}
+
+/// <summary>
+/// Where things are in cyberspace. The backbone's hub sits in the middle, and the bus runs out of it east and
+/// west as one long street. Each network's region hangs off the street, above or below it, as big as its
+/// network needs, with its router opening onto the street. A region that outgrows its place moves to a new one
+/// and leaves a gap that a later region can take. The practice regions sit in a row of their own far away, with
+/// void all round.
 /// </summary>
 /// <remarks>
-/// Inside a region every machine has a pad on a fixed slot: the router at the top, where it opens onto the bus
-/// above, switches below it and hosts below them, slots two cells apart so pads never touch. Tile coordinates
-/// have x to the right and y up.
+/// Positions here are in cells, <see cref="Cell"/> tiles square; tiles are cells times <see cref="Cell"/>. The
+/// street is the row of cells at y 0. A region above the street is generated with its router at the top as
+/// usual and then flipped, so its router faces down onto the street.
 /// </remarks>
 public sealed class CyberLayout
 {
     /// <summary>Width of a cell, in tiles.</summary>
     public const int Cell = 5;
 
-    /// <summary>A region's width in cells: five slot columns two cells apart.</summary>
-    public const int RegionWidth = 9;
+    /// <summary>Half the hub's width and height, in cells, beside its middle cell.</summary>
+    public const int HubHalf = 4;
 
-    /// <summary>Slot columns of a region, in the order they fill (from the middle).</summary>
-    private static readonly int[] Columns = { 4, 2, 6, 0, 8 };
+    /// <summary>Cells of void between regions side by side.</summary>
+    public const int Gap = 1;
 
-    /// <summary>Regions' height in cells.</summary>
-    public readonly int RegionHeight;
+    /// <summary>The row of cells the practice regions sit on, far from everything else.</summary>
+    public const int PracticeRow = -1000;
 
-    /// <summary>Region slots across and up (the hub takes one).</summary>
-    public readonly int Cols;
+    /// <summary>The regions placed along each side of the street: east above, east below, west above, west below.</summary>
+    private readonly List<CyberRect>[] _lanes = { new(), new(), new(), new() };
 
-    public readonly int Rows;
+    /// <summary>The street's ends, in cells, beyond the hub.</summary>
+    public int StreetWest { get; private set; } = -HubHalf;
 
-    /// <summary>Which slot is the hub.</summary>
-    public readonly int Hub;
+    public int StreetEast { get; private set; } = HubHalf;
 
-    /// <summary>How many regions there are for networks.</summary>
-    public readonly int Regions;
+    /// <summary>The hub's cells.</summary>
+    public static CyberRect HubCells => new(-HubHalf, -HubHalf, 2 * HubHalf + 1, 2 * HubHalf + 1);
 
-    /// <summary>How many practice regions follow them, cut off from everything.</summary>
-    public readonly int Sandboxes;
-
-    /// <summary>
-    /// A layout for <paramref name="regions"/> networks of at most <paramref name="hosts"/> hosts each (more
-    /// fit, by row, up to the region's height), with <paramref name="sandboxes"/> practice regions.
-    /// </summary>
-    public CyberLayout(int regions, int hosts, int sandboxes = 0)
+    /// <summary>A rectangle of cells, as tiles.</summary>
+    public static CyberRect Tiles(CyberRect cells)
     {
-        var hostRows = Math.Max((hosts + Columns.Length - 1) / Columns.Length, 2);
-        var slots = regions + 1;
-        Cols = (int) Math.Ceiling(Math.Sqrt(slots));
-        Rows = (slots + Cols - 1) / Cols;
-        RegionHeight = 2 * hostRows + 3;
-        Hub = Rows / 2 * Cols + Cols / 2;
-        Regions = regions;
-        Sandboxes = sandboxes;
+        return new CyberRect(cells.X * Cell, cells.Y * Cell, cells.W * Cell, cells.H * Cell);
     }
 
-    /// <summary>Every region, the networks' and then the practice ones.</summary>
-    public int AllRegions => Regions + Sandboxes;
-
-    /// <summary>The networks' part of the level, in cells.</summary>
-    private (int W, int H) CityCells => (Cols * (RegionWidth + 1) + 1, Rows * (RegionHeight + 1) + 1);
-
-    private (int X, int Y) SlotOrigin(int slot)
+    /// <summary>Whether a region's cells are above the street, so it's flipped.</summary>
+    public static bool Above(CyberRect cells)
     {
-        var (c, r) = (slot % Cols, slot / Cols);
-        return (1 + c * (RegionWidth + 1), 1 + r * (RegionHeight + 1));
-    }
-
-    private int SlotOf(int region)
-    {
-        return region >= Hub ? region + 1 : region;
-    }
-
-    /// <summary>The level's size in cells: the networks' part, and the practice band above it.</summary>
-    public (int W, int H) Cells
-    {
-        get
-        {
-            var (w, h) = CityCells;
-            if (Sandboxes == 0)
-                return (w, h);
-
-            return (Math.Max(w, Sandboxes * (RegionWidth + 2) + 1), h + RegionHeight + 2);
-        }
-    }
-
-    /// <summary>The level's size in tiles.</summary>
-    public (int W, int H) Size => (Cells.W * Cell, Cells.H * Cell);
-
-    /// <summary>A region's tiles (practice regions numbered after the networks').</summary>
-    public CyberRect RegionRect(int region)
-    {
-        var (x, y) = region >= Regions
-            ? (1 + (region - Regions) * (RegionWidth + 2), CityCells.H + 1)
-            : SlotOrigin(SlotOf(region));
-
-        return new CyberRect(x * Cell, y * Cell, RegionWidth * Cell, RegionHeight * Cell);
-    }
-
-    /// <summary>The hub's tiles.</summary>
-    public CyberRect HubRect
-    {
-        get
-        {
-            var (x, y) = SlotOrigin(Hub);
-            return new CyberRect(x * Cell, y * Cell, RegionWidth * Cell, RegionHeight * Cell);
-        }
-    }
-
-    /// <summary>The tile at the middle of a region's slot.</summary>
-    public (int X, int Y) SlotCentre(int region, (int X, int Y) slot)
-    {
-        var rect = RegionRect(region);
-        return (rect.X + slot.X * Cell + Cell / 2, rect.Y + slot.Y * Cell + Cell / 2);
-    }
-
-    /// <summary>The router's slot: the middle of the top row, by the bus.</summary>
-    public (int X, int Y) RouterSlot => (Columns[0], RegionHeight - 1);
-
-    /// <summary>Switch slots, in the order they fill.</summary>
-    public List<(int X, int Y)> SwitchSlots => Columns.Select(x => (x, RegionHeight - 3)).ToList();
-
-    /// <summary>Host slots, top row first, each row from the middle out.</summary>
-    public List<(int X, int Y)> HostSlots
-    {
-        get
-        {
-            var slots = new List<(int, int)>();
-            for (var row = (RegionHeight - 5) / 2; row >= 0; row--)
-            {
-                foreach (var x in Columns)
-                {
-                    slots.Add((x, row * 2));
-                }
-            }
-
-            return slots;
-        }
+        return cells.Y > 0;
     }
 
     /// <summary>
-    /// The whole level with no network in it: the bus between regions and the hub, everything else void. Row
-    /// by row from the bottom.
+    /// Finds a place for a region of a shape: the free stretch of street nearest the hub, on either side,
+    /// that it fits along. Returns its cells.
     /// </summary>
-    public CyberFloor[] Base()
+    public CyberRect Place(RegionShape shape)
     {
-        var (w, h) = Size;
-        var (cityW, cityH) = CityCells;
-        var hub = HubRect;
-        var tiles = new CyberFloor[w * h];
-        for (var y = 0; y < h; y++)
+        var (w, h) = (shape.Width, shape.Height);
+        CyberRect? best = null;
+        var bestDistance = int.MaxValue;
+        for (var lane = 0; lane < _lanes.Length; lane++)
         {
-            for (var x = 0; x < w; x++)
-            {
-                var (cx, cy) = (x / Cell, y / Cell);
-                var bus = cx < cityW
-                          && cy < cityH
-                          && (cx % (RegionWidth + 1) == 0 || cy % (RegionHeight + 1) == 0);
+            var east = lane < 2;
+            var above = lane % 2 == 0;
 
-                tiles[y * w + x] = bus || hub.Contains(x, y) ? CyberFloor.Bus : CyberFloor.Void;
+            // Distances from the hub's edge, along the street, taken up by the regions already here.
+            var taken = _lanes[lane]
+                .Select(r => east ? (From: r.X - HubHalf - 1, To: r.X + r.W - HubHalf - 1) : (From: -HubHalf - (r.X + r.W), To: -HubHalf - r.X))
+                .OrderBy(t => t.From)
+                .ToList();
+
+            var at = Gap;
+            foreach (var (from, to) in taken)
+            {
+                if (from - Gap >= at + w)
+                    break;
+
+                at = Math.Max(at, to + Gap);
             }
+
+            if (at >= bestDistance)
+                continue;
+
+            bestDistance = at;
+            var x = east ? HubHalf + 1 + at : -HubHalf - at - w;
+            best = new CyberRect(x, above ? 1 : -h, w, h);
         }
 
-        return tiles;
+        var placed = best!.Value;
+        _lanes[LaneOf(placed)].Add(placed);
+        StreetWest = Math.Min(StreetWest, placed.X - Gap);
+        StreetEast = Math.Max(StreetEast, placed.X + placed.W - 1 + Gap);
+        return placed;
+    }
+
+    /// <summary>
+    /// Gives a region's place back.
+    /// </summary>
+    public void Free(CyberRect cells)
+    {
+        _lanes[LaneOf(cells)].Remove(cells);
+    }
+
+    private static int LaneOf(CyberRect cells)
+    {
+        return (cells.X > 0 ? 0 : 2) + (Above(cells) ? 0 : 1);
+    }
+
+    /// <summary>The cells of a practice region.</summary>
+    public static CyberRect PracticeCells(int slot)
+    {
+        var shape = RegionShape.Smallest;
+        return new CyberRect(slot * (shape.Width + 2 * Gap), PracticeRow, shape.Width, shape.Height);
     }
 
     /// <summary>Whether a tile of cyberspace can be walked on.</summary>
