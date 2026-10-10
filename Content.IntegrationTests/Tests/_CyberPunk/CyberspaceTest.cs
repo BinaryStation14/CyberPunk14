@@ -1010,7 +1010,7 @@ public sealed class CyberspaceTest : GameTest
     /// Whether one tile of cyberspace can be walked to from another, without crossing any tile of
     /// <paramref name="blocked"/>.
     /// </summary>
-    private static bool Reaches(CyberspaceSystem cyberspace, Vector2i from, Vector2i to, HashSet<Vector2i>? blocked = null)
+    private static bool Reaches(CyberspaceSystem cyberspace, Vector2i from, Vector2i to, HashSet<Vector2i> blocked = null)
     {
         var seen = new HashSet<Vector2i> { from };
         var queue = new Queue<Vector2i>();
