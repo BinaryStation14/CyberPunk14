@@ -1,0 +1,23 @@
+{
+    "version": 1,
+    "license": "CC0-1.0",
+    "copyright": "Made for CyberPunk14 after Switchboard's cyberspace shapes",
+    "size": {
+        "x": 32,
+        "y": 32
+    },
+    "states": [
+        {
+            "name": "backbone"
+        },
+        {
+            "name": "circle"
+        },
+        {
+            "name": "diamond"
+        },
+        {
+            "name": "square"
+        }
+    ]
+}

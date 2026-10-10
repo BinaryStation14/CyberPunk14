@@ -325,6 +325,103 @@ public sealed partial class WasmMachineSystem
         {
             machine.Comp.Vm!.SetNetwork(null, null, Array.Empty<uint>(), NoHosts);
         }
+
+        var networksEv = new MachineNetworksRebuiltEvent(Topology(served, members));
+        RaiseLocalEvent(ref networksEv);
+    }
+
+    /// <summary>
+    /// What's on each served network and what's linked to what, for cyberspace: each switch or router is linked
+    /// to every machine on the cable it joins and to the switches and routers that cable (or a rack) reaches.
+    /// </summary>
+    private List<MachineNetwork> Topology(Dictionary<object, Entity<NetworkHubComponent>> served,
+        Dictionary<object, List<EntityUid>> members)
+    {
+        var networks = new Dictionary<object, MachineNetwork>();
+        foreach (var (network, router) in served)
+        {
+            networks[network] = new MachineNetwork(router.Owner);
+        }
+
+        var addressOf = _addresses.ToDictionary(a => a.Value.Machine, a => a.Key);
+        foreach (var (network, list) in members)
+        {
+            if (!networks.TryGetValue(network, out var net))
+                continue;
+
+            foreach (var machine in list)
+            {
+                if (addressOf.TryGetValue(machine, out var address))
+                    net.Hosts.Add((machine, address));
+            }
+
+            net.Hosts.Sort((a, b) => a.Address.CompareTo(b.Address));
+        }
+
+        var hubs = EntityQueryEnumerator<NetworkHubComponent>();
+        while (hubs.MoveNext(out var uid, out var hub))
+        {
+            if (NetworkOf(uid, hub.Node) is { } network && networks.TryGetValue(network, out var net))
+                net.Hubs.Add(uid);
+        }
+
+        foreach (var net in networks.Values)
+        {
+            net.Hubs.Sort();
+            var hosts = net.Hosts.Select(h => h.Machine).ToHashSet();
+            var links = new HashSet<(EntityUid, EntityUid)>();
+            void Link(EntityUid a, EntityUid b)
+            {
+                if (a != b)
+                    links.Add(a.CompareTo(b) < 0 ? (a, b) : (b, a));
+            }
+
+            foreach (var hub in net.Hubs)
+            {
+                if (!TryComp<NetworkHubComponent>(hub, out var hubComp)
+                    || !_nodes.TryGetNode(hub, hubComp.Node, out DataHubNode? start))
+                {
+                    continue;
+                }
+
+                var seen = new HashSet<Node> { start };
+                var queue = new Queue<Node>(start.ReachableNodes);
+                seen.UnionWith(start.ReachableNodes);
+                while (queue.TryDequeue(out var node))
+                {
+                    if (node is DataHubNode)
+                    {
+                        Link(hub, node.Owner);
+                        continue;
+                    }
+
+                    if (hosts.Contains(node.Owner))
+                    {
+                        Link(hub, node.Owner);
+                        continue;
+                    }
+
+                    if (!HasComp<DataCableComponent>(node.Owner))
+                        continue;
+
+                    foreach (var device in _cableDevices.GetValueOrDefault(node.Owner) ?? new List<EntityUid>())
+                    {
+                        if (hosts.Contains(device))
+                            Link(hub, device);
+                    }
+
+                    foreach (var next in node.ReachableNodes)
+                    {
+                        if (seen.Add(next))
+                            queue.Enqueue(next);
+                    }
+                }
+            }
+
+            net.Links.AddRange(links.OrderBy(l => l.Item1).ThenBy(l => l.Item2));
+        }
+
+        return networks.Values.OrderBy(n => n.Router).ToList();
     }
 
     /// <summary>
@@ -363,3 +460,21 @@ public sealed partial class WasmMachineSystem
         _sent.Clear();
     }
 }
+
+/// <summary>
+/// A served network as cyberspace sees it: its router, its switches and routers (the router among them), its
+/// machines with their addresses, and the links between them, each pair lowest first.
+/// </summary>
+public sealed class MachineNetwork(EntityUid router)
+{
+    public readonly EntityUid Router = router;
+    public readonly List<EntityUid> Hubs = new();
+    public readonly List<(EntityUid Machine, uint Address)> Hosts = new();
+    public readonly List<(EntityUid A, EntityUid B)> Links = new();
+}
+
+/// <summary>
+/// Raised (broadcast) whenever the machine networks have been worked out again, with every served network.
+/// </summary>
+[ByRefEvent]
+public readonly record struct MachineNetworksRebuiltEvent(List<MachineNetwork> Networks);
