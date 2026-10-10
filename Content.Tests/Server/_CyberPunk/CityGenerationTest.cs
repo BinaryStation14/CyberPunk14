@@ -27,10 +27,49 @@ public sealed class CityGenerationTest
     {
         var plan = CityGenerator.Generate(seed);
         Assert.That(plan.Zones, Does.Contain(CityZone.Ocean));
-        Assert.That(plan.Zones, Does.Contain(CityZone.Downtown));
-        Assert.That(plan.Zones.Any(z => z is CityZone.Badlands or CityZone.Scrub or CityZone.Solar));
+        Assert.That(plan.Zones, Does.Contain(CityZone.Corporate));
+        Assert.That(plan.Zones.Any(z => z is CityZone.Badlands or CityZone.Scrub));
         Assert.That(plan.Floor(plan.Spawn.X, plan.Spawn.Y), Is.EqualTo(CityFloor.Asphalt));
         Assert.That(plan.Structure(plan.Spawn.X, plan.Spawn.Y), Is.EqualTo(CityStructure.None));
+    }
+
+    /// <summary>
+    /// Every city has each zone within its share of districts, one each of its landmarks, and a few townships out
+    /// in the badlands, inside the fence.
+    /// </summary>
+    [Test]
+    public void EveryZoneAndLandmark([ValueSource(nameof(Seeds))] ulong seed)
+    {
+        var plan = CityGenerator.Generate(seed);
+        var quotas = new Dictionary<CityZone, (int Min, int Max)>
+        {
+            [CityZone.Corporate] = (3, 4),
+            [CityZone.Public] = (2, 3),
+            [CityZone.Commercial] = (5, 7),
+            [CityZone.HighClass] = (3, 4),
+            [CityZone.MediumClass] = (5, 7),
+            [CityZone.LowClass] = (5, 7),
+            [CityZone.Industrial] = (5, 7),
+            [CityZone.Shanty] = (2, 4),
+        };
+        foreach (var (zone, (min, max)) in quotas)
+        {
+            Assert.That(plan.Zones.Count(z => z == zone), Is.InRange(min, max), zone.ToString());
+        }
+
+        foreach (var landmark in new[]
+                 {
+                     CityLandmark.Headquarters, CityLandmark.CityHall, CityLandmark.PoliceStation, CityLandmark.Hospital,
+                     CityLandmark.TransitStation, CityLandmark.Megabuilding, CityLandmark.SolarPlant,
+                 })
+        {
+            Assert.That(plan.Landmarks.Count(l => l.Kind == landmark), Is.EqualTo(1), landmark.ToString());
+        }
+
+        var townships = plan.Landmarks.Where(l => l.Kind == CityLandmark.Township).ToList();
+        Assert.That(townships, Has.Count.InRange(2, 4));
+        var (near, far) = (CityGenerator.FenceInset, plan.Size - 1 - CityGenerator.FenceInset);
+        Assert.That(townships.All(t => t.X > near && t.Y > near && t.X + t.W - 1 < far && t.Y + t.H - 1 < far));
     }
 
     /// <summary>

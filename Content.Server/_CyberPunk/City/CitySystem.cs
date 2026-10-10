@@ -1,3 +1,4 @@
+using System.Linq;
 using Content.Server.Atmos.EntitySystems;
 using Content.Shared.Atmos;
 using Content.Shared.GameTicking;
@@ -18,7 +19,8 @@ namespace Content.Server._CyberPunk.City;
 /// <summary>
 /// The generated city: one map, made from a <see cref="CityPlan"/> the first time a player steps through a
 /// <see cref="CityPortalComponent"/>, with a gateway back by where they arrive. The sea is walled off by
-/// invisible barriers.
+/// invisible barriers. The tiles are laid at once; the walls, rocks and everything else go up over the following
+/// ticks, nearest the arrival point first, so raising the city doesn't stall the server.
 /// </summary>
 public sealed partial class CitySystem : EntitySystem
 {
@@ -33,6 +35,9 @@ public sealed partial class CitySystem : EntitySystem
     private static readonly EntProtoId Barrier = "CityBarrier";
     private static readonly EntProtoId FenceStraight = "FenceMetalStraight";
     private static readonly EntProtoId FenceCorner = "FenceMetalCorner";
+
+    /// <summary>How many of the city's entities are spawned each tick until it's built.</summary>
+    private const int SpawnsPerTick = 2000;
 
     private static readonly Dictionary<CityFloor, string> TileIds = new()
     {
@@ -63,6 +68,7 @@ public sealed partial class CitySystem : EntitySystem
         [CityStructure.WallRust] = "WallSolidRust",
         [CityStructure.WallBrick] = "WallBrick",
         [CityStructure.WallConcrete] = "WallConcrete",
+        [CityStructure.WallWood] = "WallWood",
         [CityStructure.Girder] = "Girder",
         [CityStructure.Window] = "Window",
         [CityStructure.WindowReinforced] = "ReinforcedWindow",
@@ -78,6 +84,12 @@ public sealed partial class CitySystem : EntitySystem
 
     private EntityUid? _city;
     private EntityUid? _returnPortal;
+
+    /// <summary>What's left to spawn in the city, in order.</summary>
+    private readonly Queue<(EntProtoId Proto, Vector2i Tile, Angle Rotation)> _pending = new();
+
+    /// <summary>Whether the city still has entities waiting to be spawned.</summary>
+    public bool Building => _pending.Count > 0;
 
     /// <summary>The map holding the city, once it's made.</summary>
     public EntityUid? City => _city;
@@ -95,6 +107,29 @@ public sealed partial class CitySystem : EntitySystem
     {
         _city = null;
         _returnPortal = null;
+        _pending.Clear();
+    }
+
+    public override void Update(float frameTime)
+    {
+        base.Update(frameTime);
+        if (_pending.Count == 0)
+            return;
+
+        if (_city is not { } city || TerminatingOrDeleted(city))
+        {
+            _pending.Clear();
+            return;
+        }
+
+        for (var i = 0; i < SpawnsPerTick && _pending.TryDequeue(out var next); i++)
+        {
+            var coords = new EntityCoordinates(city, next.Tile.X + 0.5f, next.Tile.Y + 0.5f);
+            SpawnAttachedTo(next.Proto, coords, rotation: next.Rotation);
+        }
+
+        if (_pending.Count == 0)
+            Log.Info("Finished building the city.");
     }
 
     private void OnPortalCollide(Entity<CityPortalComponent> ent, ref StartCollideEvent args)
@@ -162,22 +197,30 @@ public sealed partial class CitySystem : EntitySystem
 
         _map.SetTiles(mapUid, grid, tiles);
 
+        var spawns = new List<(EntProtoId Proto, Vector2i Tile, Angle Rotation)>();
         for (var y = 0; y < plan.Size; y++)
         {
             for (var x = 0; x < plan.Size; x++)
             {
-                var coords = new EntityCoordinates(mapUid, x + 0.5f, y + 0.5f);
+                var tile = new Vector2i(x, y);
                 if (StructureIds.TryGetValue(plan.Structure(x, y), out var structure))
-                    Spawn(structure, coords);
+                    spawns.Add((structure, tile, Angle.Zero));
                 else if (plan.Structure(x, y) == CityStructure.Fence)
                 {
                     var (fence, rotation) = Fence(plan, x, y);
-                    SpawnAttachedTo(fence, coords, rotation: rotation);
+                    spawns.Add((fence, tile, rotation));
                 }
 
                 if (Walled(plan, x, y))
-                    Spawn(Barrier, coords);
+                    spawns.Add((Barrier, tile, Angle.Zero));
             }
+        }
+
+        _pending.Clear();
+        var arrival = new Vector2i(plan.Spawn.X, plan.Spawn.Y);
+        foreach (var spawn in spawns.OrderBy(s => (s.Tile - arrival).LengthSquared))
+        {
+            _pending.Enqueue(spawn);
         }
 
         var portal = Spawn(ReturnPortal, new EntityCoordinates(mapUid, plan.Spawn.X + 0.5f, plan.Spawn.Y + 0.5f));

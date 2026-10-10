@@ -8,20 +8,39 @@ public enum CityZone : byte
     Ocean,
     /// <summary>Where land meets the sea: beach, shallows and dunes.</summary>
     Coast,
-    /// <summary>The port: warehouses on the waterfront.</summary>
-    Docks,
     /// <summary>Corporate towers in the middle of the city.</summary>
-    Downtown,
+    Corporate,
+    /// <summary>Shops, markets, bars and clubs.</summary>
     Commercial,
-    Residential,
+    /// <summary>City hall, the police, the hospital, the transit station and parks.</summary>
+    Public,
+    HighClass,
+    MediumClass,
+    LowClass,
+    /// <summary>Factories and warehouses, and the port where they meet the sea.</summary>
     Industrial,
-    Slums,
-    Park,
+    /// <summary>Shacks and ruins at the city's fringe.</summary>
+    Shanty,
     Badlands,
     /// <summary>Dry dirt and brush between the city and the badlands.</summary>
     Scrub,
-    /// <summary>A solar farm out past the city.</summary>
+    /// <summary>A sparse township along a road out in the badlands.</summary>
+    Township,
+    /// <summary>The city's solar power plant.</summary>
     Solar,
+}
+
+/// <summary>The buildings and places every city has.</summary>
+public enum CityLandmark : byte
+{
+    Headquarters,
+    CityHall,
+    PoliceStation,
+    Hospital,
+    TransitStation,
+    Megabuilding,
+    SolarPlant,
+    Township,
 }
 
 public enum CityFloor : byte
@@ -54,6 +73,7 @@ public enum CityStructure : byte
     WallRust,
     WallBrick,
     WallConcrete,
+    WallWood,
     Girder,
     Window,
     WindowReinforced,
@@ -86,6 +106,9 @@ public sealed class CityPlan
 
     /// <summary>A street tile in the middle of the city where people arrive.</summary>
     public (int X, int Y) Spawn;
+
+    /// <summary>Where each landmark stands, as its bottom-left tile and size.</summary>
+    public readonly List<(CityLandmark Kind, int X, int Y, int W, int H)> Landmarks = new();
 
     public CityPlan(int districts)
     {
