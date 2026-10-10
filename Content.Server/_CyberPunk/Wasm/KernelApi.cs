@@ -849,6 +849,20 @@ internal sealed class KernelApi
         Def("deck_hold", (_, _, _) => -1);
         Def("deck_push", (_, _, _, _) => -1);
 
+        Def("deck_colour", (c, hex, len) =>
+        {
+            var io = Io(c);
+            if (!io.Is(DeviceKind.Deck) || (uint) len > 7)
+                return -1;
+
+            var text = ReadText(c, hex, len).TrimStart('#');
+            if (text.Length != 6 || !Color.TryFromHex("#" + text, out _))
+                return -1;
+
+            io.DeckColour = "#" + text;
+            return 0;
+        });
+
         Def("body_vitals", (_, _, _) => -1);
         Def("body_alert", (_, _, _) => -1);
         Def("body_inject", _ => -1);

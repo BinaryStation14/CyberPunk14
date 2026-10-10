@@ -42,6 +42,7 @@ HELP = [
     "jobs, kill N               background jobs: list, stop one",
     "flash ADDR FILE.bin        put a program on a door or camera",
     "hold FILE, push [ADDR] FILE  on a deck: hold a program, copy a file",
+    "colour HEX                 on a deck: the colour you show in, like #4de6ff",
     "hostname [NAME]            show or set this computer's network name",
     "hosts, ip                  names the router knows; this address",
     "echo TEXT...               print text",
@@ -341,6 +342,15 @@ def push(rest):
     if not deck.push(to, file):
         say("push: there's no " + file + "\n")
 
+def colour(rest):
+    words = rest.split()
+    if len(words) != 1:
+        say("usage: colour HEX   (like #4de6ff, on a deck)\n")
+    elif not is_deck():
+        say("colour: only a deck, in cyberspace, has a colour to show\n")
+    elif not deck.colour(words[0]):
+        say("colour: " + words[0] + " isn't a colour: six hex digits, like #4de6ff\n")
+
 def hostname(rest):
     if rest != "":
         if not net.set_hostname(rest):
@@ -427,6 +437,8 @@ def command(line):
         hold(rest)
     elif word == "push":
         push(rest)
+    elif word == "colour" or word == "color":
+        colour(rest)
     elif word == "hostname":
         hostname(rest)
     elif word == "hosts":

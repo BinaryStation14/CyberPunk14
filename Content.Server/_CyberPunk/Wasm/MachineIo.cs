@@ -158,6 +158,9 @@ public sealed class MachineIo
     /// <summary>Whether a program changed <see cref="Hostname"/> since the world last looked.</summary>
     public bool HostnameChanged;
 
+    /// <summary>A colour, as #RRGGBB, a program asked the deck to show in since the world last looked.</summary>
+    public string? DeckColour;
+
     /// <summary>Every hostname the routers know on the machine's network, and its address.</summary>
     public IReadOnlyDictionary<string, uint> Hosts = new Dictionary<string, uint>();
 

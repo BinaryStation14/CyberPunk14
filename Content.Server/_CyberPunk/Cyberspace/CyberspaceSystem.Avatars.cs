@@ -1,4 +1,5 @@
 using System.Numerics;
+using Content.Server._CyberPunk.Machines;
 using Content.Server.Cloning;
 using Content.Shared._CyberPunk.Cyberspace;
 using Content.Shared.Access.Components;
@@ -44,6 +45,7 @@ public sealed partial class CyberspaceSystem
     {
         SubscribeLocalEvent<CyberProxyIdComponent, GetAdditionalAccessEvent>(OnProxyIdAccess);
         SubscribeLocalEvent<CyberProxyIdComponent, ExaminedEvent>(OnProxyIdExamined);
+        SubscribeLocalEvent<CyberAvatarComponent, DeckColourChangedEvent>(OnDeckColourChanged);
     }
 
     private void TakeShape(EntityUid avatar, Entity<NetrunnerComponent> body)
@@ -67,9 +69,22 @@ public sealed partial class CyberspaceSystem
         _spawning.EquipStartingGear(avatar, AvatarGear);
 
         body.Comp.Tint ??= Color.FromHsv(new Vector4(_random.NextFloat(), 0.75f, 1f, 1f));
+        SetTint(avatar, body.Comp.Tint.Value);
+    }
+
+    private void SetTint(EntityUid avatar, Color tint)
+    {
         var look = EnsureComp<CyberAvatarLookComponent>(avatar);
-        look.Tint = body.Comp.Tint.Value;
+        look.Tint = tint;
         Dirty(avatar, look);
+    }
+
+    private void OnDeckColourChanged(Entity<CyberAvatarComponent> ent, ref DeckColourChangedEvent args)
+    {
+        if (TryComp<NetrunnerComponent>(ent.Comp.Body, out var runner))
+            runner.Tint = args.Colour;
+
+        SetTint(ent, args.Colour);
     }
 
     private void OnProxyIdAccess(Entity<CyberProxyIdComponent> ent, ref GetAdditionalAccessEvent args)

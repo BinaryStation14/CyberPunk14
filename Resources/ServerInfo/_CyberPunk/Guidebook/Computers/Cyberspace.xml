@@ -14,7 +14,7 @@
   - Use the deck in your hand instead to raise a [bold]practice grid[/bold]: a network of your own, with a training server, that nobody else can reach.
 
   ## Your deck
-  Your virtual body is a computer, your deck, with an address on the network you came in through ([mono]ip[/mono] shows it). Its disk keeps its files between runs. Open its terminal from the action bar.
+  Your virtual body is a computer, your deck, with an address on the network you came in through ([mono]ip[/mono] shows it). Its disk keeps its files between runs. Open its terminal from the action bar. Type [mono]colour #4de6ff[/mono] in it to change the colour you show in; anyone at your deck's terminal can change it too.
 
   ## Using machines
   Use a machine's node to open it, as if you stood at the machine itself: a computer's terminal, a vending machine's stock, an air alarm's settings. You wear a [bold]proxy ID[/bold] that opens whatever the ID your real body wears opens. A machine your ID doesn't open is locked: stand at its node for three seconds to [bold]breach[/bold] it, and it stays breached until you jack out. Walk away from the node and the machine closes.

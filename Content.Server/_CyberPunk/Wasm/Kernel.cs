@@ -287,6 +287,8 @@ public static class Kernel
             "Puts the program in a file (or a program that comes with the deck) in a free hand of the runner's virtual body, to use. 0 ok (the result shows on the terminal), -2 not a program."),
         new("deck_push", "(param $addr i32 $name i32 $len i32) (result i32)", KernelScope.Deck, 4,
             "Copies a file to the computer at addr (one the deck reaches over the network), or with addr 0 onto the computer whose pad the runner stands at, if the runner may use it (it is nobody's, they carry its owner's card, or they stand at it with its lock breached). It lands under its own name, out of any folder. 0 sent (the result shows on the terminal), -2 no such file."),
+        new("deck_colour", "(param $hex i32 $len i32) (result i32)", KernelScope.Deck, 10,
+            "Sets the colour the runner's virtual body shows in, as hex: RRGGBB, with or without a #. It's kept between runs. 0 ok, -1 not a colour."),
         new("body_vitals", "(param $buf i32 $cap i32) (result i32)", KernelScope.Implant, 5,
             "Copies the vitals of the body the implant is in into buf, separated by spaces: state (ok, critical or dead), total damage (critical at 100, dead at 200), brute, burn, oxygen loss, blood in percent, how fast it bleeds, doses left (a trauma pump's) and 1 if it can boost now (a reflex booster's). Returns the length, -1 if it isn't fitted."),
         new("body_alert", "(param $ptr i32 $len i32) (result i32)", KernelScope.Implant, 5,
