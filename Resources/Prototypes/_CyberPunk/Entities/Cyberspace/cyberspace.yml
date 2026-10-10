@@ -177,20 +177,13 @@
   - Inventory
   - EyeBlinking
 
-# What every runner's virtual body wears. It's part of them, so none of it comes off. Female runners wear the
-# skirt.
+# What every runner's virtual body wears. It's part of them, so none of it comes off.
 - type: startingGear
   id: CyberAvatar
   equipment:
     jumpsuit: ClothingUniformCyberAvatar
     shoes: ClothingShoesCyberAvatar
     id: CyberProxyIdCard
-
-- type: startingGear
-  parent: CyberAvatar
-  id: CyberAvatarSkirt
-  equipment:
-    jumpsuit: ClothingUniformCyberAvatarSkirt
 
 - type: entity
   parent: UnsensoredClothingUniformBase
@@ -200,35 +193,10 @@
   categories: [ HideSpawnMenu ]
   components:
   - type: Sprite
-    sprite: Clothing/Uniforms/Jumpsuits/Color/color.rsi
-    layers:
-    - state: icon
-      color: &skin "#595959"
-  - type: Item
-    inhandVisuals:
-      left:
-      - state: inhand-left
-        color: *skin
-      right:
-      - state: inhand-right
-        color: *skin
+    sprite: Clothing/Uniforms/Jumpsuits/Special/ninja.rsi
   - type: Clothing
-    sprite: Clothing/Uniforms/Jumpsuits/Color/color.rsi
-    clothingVisuals:
-      jumpsuit:
-      - state: equipped-INNERCLOTHING
-        color: *skin
+    sprite: Clothing/Uniforms/Jumpsuits/Special/ninja.rsi
   - type: Unremoveable
-
-- type: entity
-  parent: ClothingUniformCyberAvatar
-  id: ClothingUniformCyberAvatarSkirt
-  categories: [ HideSpawnMenu ]
-  components:
-  - type: Sprite
-    sprite: Clothing/Uniforms/Jumpskirts/Color/color.rsi
-  - type: Clothing
-    sprite: Clothing/Uniforms/Jumpskirts/Color/color.rsi
 
 - type: entity
   parent: ClothingShoesBase

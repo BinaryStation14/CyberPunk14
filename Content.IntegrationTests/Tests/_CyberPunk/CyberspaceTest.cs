@@ -19,7 +19,6 @@ using Content.Shared.Humanoid;
 using Content.Shared.Interaction;
 using Content.Shared.Inventory;
 using Content.Shared.Mind;
-using Content.Shared.Preferences;
 using Content.Shared.Power.EntitySystems;
 using Robust.Shared.GameObjects;
 using Robust.Shared.Map;
@@ -277,8 +276,8 @@ public sealed class CyberspaceTest : GameTest
 
     /// <summary>
     /// A virtual body takes its runner's shape: their species' body with its hands and markings. It wears a
-    /// runner's uniform, not their clothes, with a skirt for a female runner, and a proxy ID that opens what their
-    /// body's ID opens, whichever that is now. It's an avatar, though: it doesn't breathe, and it bleeds ghostlight.
+    /// runner's uniform, not their clothes, and a proxy ID that opens what their body's ID opens, whichever that
+    /// is now. It's an avatar, though: it doesn't breathe, and it bleeds ghostlight.
     /// </summary>
     [Test]
     public async Task AvatarsLookLikeTheirRunners()
@@ -333,15 +332,6 @@ public sealed class CyberspaceTest : GameTest
                 "it shows the ID their body wears now");
 
             cyberspace.JackOut(runner, "", false);
-
-            var (woman, womanDeck) = Runner(minds, hands, godmode, 0, 0);
-            _entMan.System<HumanoidProfileSystem>().ApplyProfileTo(woman, new HumanoidCharacterProfile().WithSex(Sex.Female));
-            Assert.That(cyberspace.TryPractise(woman, womanDeck));
-            Assert.That(cyberspace.IsJackedIn(woman, out var skirted));
-            Assert.That(inventory.TryGetSlotEntity(skirted!.Value, "jumpsuit", out var skirt));
-            Assert.That(_entMan.GetComponent<MetaDataComponent>(skirt!.Value).EntityPrototype!.ID, Is.EqualTo("ClothingUniformCyberAvatarSkirt"));
-
-            cyberspace.JackOut(woman, "", false);
         });
     }
 
