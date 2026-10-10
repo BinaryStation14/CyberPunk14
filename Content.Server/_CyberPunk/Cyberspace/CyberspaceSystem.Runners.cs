@@ -10,6 +10,7 @@ using Content.Shared.Administration.Systems;
 using Content.Shared.Damage.Components;
 using Content.Shared.Damage.Systems;
 using Content.Shared.Examine;
+using Content.Shared.Ghost.Systems;
 using Content.Shared.Hands.EntitySystems;
 using Content.Shared.Interaction;
 using Content.Shared.Interaction.Events;
@@ -35,8 +36,8 @@ namespace Content.Server._CyberPunk.Cyberspace;
 /// <remarks>
 /// A runner is thrown out, with <see cref="Dumpshock"/> before they can jack in again, when the deck leaves
 /// their hands, the machine drops off the network or out of range or sight, the path dissolves under them, or
-/// their body goes down. If their virtual body dies, they're thrown out and their real body collapses. Jacking
-/// out by choice costs nothing.
+/// their body goes down. If their virtual body goes down, they're thrown out and their real body collapses.
+/// Jacking out by choice costs nothing.
 /// </remarks>
 public sealed partial class CyberspaceSystem
 {
@@ -75,6 +76,7 @@ public sealed partial class CyberspaceSystem
         SubscribeLocalEvent<CyberAvatarComponent, CyberOpenDeckActionEvent>(OnOpenDeckAction);
         SubscribeLocalEvent<CyberAvatarComponent, MindUnvisitedMessage>(OnAvatarUnvisited);
         SubscribeLocalEvent<CyberAvatarComponent, MobStateChangedEvent>(OnAvatarMobStateChanged);
+        SubscribeLocalEvent<CyberAvatarComponent, GhostAttemptEvent>(OnAvatarGhostAttempt);
         SubscribeLocalEvent<NetrunnerComponent, ExaminedEvent>(OnRunnerExamined);
     }
 
@@ -371,12 +373,22 @@ public sealed partial class CyberspaceSystem
 
     private void OnAvatarMobStateChanged(Entity<CyberAvatarComponent> ent, ref MobStateChangedEvent args)
     {
-        if (args.NewMobState != MobState.Dead || !IsJackedIn(ent.Comp.Body, out var avatar) || avatar != ent.Owner)
+        if (args.NewMobState is not (MobState.Critical or MobState.Dead)
+            || !IsJackedIn(ent.Comp.Body, out var avatar)
+            || avatar != ent.Owner)
             return;
 
         JackOut(ent.Comp.Body, Loc.GetString("cyberspace-avatar-died"), true);
         if (TryComp<StaminaComponent>(ent.Comp.Body, out var stamina))
             _stamina.TakeStaminaDamage(ent.Comp.Body, stamina.CritThreshold, stamina, ignoreResist: true);
+    }
+
+    private void OnAvatarGhostAttempt(Entity<CyberAvatarComponent> ent, ref GhostAttemptEvent args)
+    {
+        // Ghosting from here would leave the ghost wherever the avatar is put away, so they go back to their body
+        // first and ghost from there.
+        args.Cancelled = true;
+        JackOut(ent.Comp.Body, Loc.GetString("cyberspace-lost-connection"), false);
     }
 
     private void OnRunnerExamined(Entity<NetrunnerComponent> ent, ref ExaminedEvent args)
