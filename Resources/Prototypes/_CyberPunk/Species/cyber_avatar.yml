@@ -1,0 +1,8 @@
+# A runner's virtual body. It looks like whoever walks it, so its own look is only a fallback.
+- type: species
+  id: CyberAvatar
+  name: species-name-cyber-avatar
+  roundStart: false
+  prototype: CyberAvatar
+  dollPrototype: AppearanceHuman
+  skinColoration: HumanToned

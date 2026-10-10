@@ -5,10 +5,17 @@ using System.Numerics;
 using Content.IntegrationTests.Fixtures;
 using Content.Server._CyberPunk.Cyberspace;
 using Content.Server._CyberPunk.Machines;
+using Content.Server.Body.Components;
+using Content.Shared.Body;
+using Content.Shared.Body.Components;
 using Content.Shared.Damage.Systems;
 using Content.Shared.Hands.EntitySystems;
+using Content.Shared.Humanoid;
+using Content.Shared.Inventory;
 using Content.Shared.Mind;
 using Content.Shared.Power.EntitySystems;
+using Content.Shared.Storage;
+using Content.Shared.Storage.EntitySystems;
 using Robust.Shared.GameObjects;
 using Robust.Shared.Map;
 using Robust.Shared.Map.Components;
@@ -263,12 +270,71 @@ public sealed class CyberspaceTest : GameTest
     }
 
     /// <summary>
+    /// A virtual body takes its runner's shape: their species' body with its hands and markings, and copies of
+    /// their clothes with nothing in them. It's an avatar, though: it doesn't breathe, and it bleeds ghostlight.
+    /// </summary>
+    [Test]
+    public async Task AvatarsLookLikeTheirRunners()
+    {
+        var server = Pair.Server;
+        _entMan = server.ResolveDependency<IEntityManager>();
+        var cyberspace = _entMan.System<CyberspaceSystem>();
+        var mapSys = _entMan.System<SharedMapSystem>();
+        var minds = _entMan.System<SharedMindSystem>();
+        var hands = _entMan.System<SharedHandsSystem>();
+        var godmode = _entMan.System<SharedGodmodeSystem>();
+        var inventory = _entMan.System<InventorySystem>();
+        var visualBody = _entMan.System<SharedVisualBodySystem>();
+
+        await server.WaitAssertion(() =>
+        {
+            mapSys.CreateMap(out var mapId);
+            _grid = mapSys.CreateGridEntity(mapId);
+            mapSys.SetTile(_grid, Vector2i.Zero, new Tile(1));
+
+            var (runner, deck) = Runner(minds, hands, godmode, 0, 0, "MobReptilian");
+            Assert.That(inventory.TryEquip(runner, Place("ClothingUniformJumpsuitColorGrey", 0, 0), "jumpsuit", force: true));
+            Assert.That(inventory.TryEquip(runner, Place("ClothingHeadsetGrey", 0, 0), "ears", force: true));
+            var backpack = Place("ClothingBackpack", 0, 0);
+            Assert.That(inventory.TryEquip(runner, backpack, "back", force: true));
+            Assert.That(_entMan.System<SharedStorageSystem>().Insert(backpack, Place("ClothingShoesColorBlack", 0, 0), out _, playSound: false));
+
+            Assert.That(cyberspace.TryPractise(runner, deck));
+            Assert.That(cyberspace.IsJackedIn(runner, out var a));
+            var avatar = a!.Value;
+
+            Assert.That(hands.GetHandCount(avatar), Is.EqualTo(2));
+            Assert.That(_entMan.GetComponent<HumanoidProfileComponent>(avatar).Species.Id, Is.EqualTo("CyberAvatar"));
+            Assert.That(_entMan.HasComponent<RespiratorComponent>(avatar), Is.False);
+            var blood = _entMan.GetComponent<BloodstreamComponent>(avatar).BloodReferenceSolution;
+            Assert.That(blood.Contents.Select(r => r.Reagent.Prototype), Is.EqualTo(new[] { "Ghostlight" }));
+
+            Assert.That(Markings(visualBody, avatar), Is.EquivalentTo(Markings(visualBody, runner)));
+            Assert.That(Markings(visualBody, avatar), Does.Contain("LizardTailSmooth"));
+
+            Assert.That(inventory.TryGetSlotEntity(avatar, "jumpsuit", out var jumpsuit));
+            Assert.That(_entMan.GetComponent<MetaDataComponent>(jumpsuit!.Value).EntityPrototype!.ID, Is.EqualTo("ClothingUniformJumpsuitColorGrey"));
+            Assert.That(inventory.TryGetSlotEntity(avatar, "ears", out _), Is.False, "no radio");
+            Assert.That(inventory.TryGetSlotEntity(avatar, "back", out var avatarBackpack));
+            Assert.That(_entMan.GetComponent<StorageComponent>(avatarBackpack!.Value).Container.ContainedEntities, Is.Empty);
+
+            cyberspace.JackOut(runner, "", false);
+        });
+    }
+
+    private List<string> Markings(SharedVisualBodySystem visualBody, EntityUid body)
+    {
+        Assert.That(visualBody.TryGatherMarkingsData(body, null, out _, out _, out var applied));
+        return applied!.Values.SelectMany(layers => layers.Values).SelectMany(m => m).Select(m => m.MarkingId.Id).ToList();
+    }
+
+    /// <summary>
     /// Someone with a mind, who can't be hurt, holding a cyberdeck.
     /// </summary>
     private (EntityUid, EntityUid) Runner(SharedMindSystem minds, SharedHandsSystem hands, SharedGodmodeSystem godmode,
-        int x, int y)
+        int x, int y, string species = "MobHuman")
     {
-        var mob = Place("MobHuman", x, y);
+        var mob = Place(species, x, y);
         godmode.EnableGodmode(mob);
         var mind = minds.CreateMind(null);
         minds.TransferTo(mind, mob, mind: mind);

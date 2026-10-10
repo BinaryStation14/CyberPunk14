@@ -29,3 +29,7 @@ cyberspace-lost-device = The machine you're jacked into drops out from under you
 cyberspace-lost-remote = You lose the machine you were hacking, and the network with it. Dumpshock!
 cyberspace-path-dissolves = The path dissolves under you, and you with it. Dumpshock!
 cyberspace-body-down = Your body hits the floor and the connection goes with it. Dumpshock!
+
+species-name-cyber-avatar = Avatar
+reagent-name-ghostlight = ghostlight
+reagent-desc-ghostlight = What a virtual body bleeds: a runner's signal, leaking out of them as glowing light.
