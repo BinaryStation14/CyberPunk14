@@ -6,11 +6,15 @@ using Content.Server.Power.EntitySystems;
 using Content.Shared._CyberPunk.Cyberspace;
 using Content.Shared._CyberPunk.Machines;
 using Content.Shared.Actions;
+using Content.Shared.Administration.Systems;
+using Content.Shared.Damage.Components;
+using Content.Shared.Damage.Systems;
 using Content.Shared.Examine;
 using Content.Shared.Hands.EntitySystems;
 using Content.Shared.Interaction;
 using Content.Shared.Interaction.Events;
 using Content.Shared.Mind.Components;
+using Content.Shared.Mobs;
 using Content.Shared.Mobs.Systems;
 using Content.Shared.Popups;
 using Content.Shared.Standing;
@@ -31,7 +35,8 @@ namespace Content.Server._CyberPunk.Cyberspace;
 /// <remarks>
 /// A runner is thrown out, with <see cref="Dumpshock"/> before they can jack in again, when the deck leaves
 /// their hands, the machine drops off the network or out of range or sight, the path dissolves under them, or
-/// their body goes down. Jacking out by choice costs nothing.
+/// their body goes down. If their virtual body dies, they're thrown out and their real body collapses. Jacking
+/// out by choice costs nothing.
 /// </remarks>
 public sealed partial class CyberspaceSystem
 {
@@ -44,6 +49,8 @@ public sealed partial class CyberspaceSystem
     [Dependency] private StandingStateSystem _standing = default!;
     [Dependency] private SharedPopupSystem _popup = default!;
     [Dependency] private PowerReceiverSystem _power = default!;
+    [Dependency] private RejuvenateSystem _rejuvenate = default!;
+    [Dependency] private SharedStaminaSystem _stamina = default!;
     [Dependency] private SharedUserInterfaceSystem _ui = default!;
     [Dependency] private WasmMachineSystem _machines = default!;
 
@@ -67,6 +74,7 @@ public sealed partial class CyberspaceSystem
         SubscribeLocalEvent<CyberAvatarComponent, CyberJackOutActionEvent>(OnJackOutAction);
         SubscribeLocalEvent<CyberAvatarComponent, CyberOpenDeckActionEvent>(OnOpenDeckAction);
         SubscribeLocalEvent<CyberAvatarComponent, MindUnvisitedMessage>(OnAvatarUnvisited);
+        SubscribeLocalEvent<CyberAvatarComponent, MobStateChangedEvent>(OnAvatarMobStateChanged);
     }
 
     private void OnDeckAfterInteract(Entity<CyberdeckComponent> ent, ref AfterInteractEvent args)
@@ -281,13 +289,14 @@ public sealed partial class CyberspaceSystem
     }
 
     /// <summary>
-    /// Puts a runner's mind into their virtual body, standing at a spot in cyberspace.
+    /// Puts a runner's mind into their virtual body, whole again, standing at a spot in cyberspace.
     /// </summary>
     private bool Enter(Entity<NetrunnerComponent> runner, EntityUid avatar, EntityCoordinates at, JackIn how)
     {
         if (!_mind.TryGetMind(runner, out var mindId, out var mind))
             return false;
 
+        _rejuvenate.PerformRejuvenate(avatar);
         _transform.SetCoordinates(avatar, at);
         _transform.AttachToGridOrMap(avatar);
         if (TryComp<WasmMachineComponent>(avatar, out var machine))
@@ -355,6 +364,16 @@ public sealed partial class CyberspaceSystem
     {
         // Their mind left some other way, like ghosting.
         JackOut(ent.Comp.Body, Loc.GetString("cyberspace-lost-connection"), false);
+    }
+
+    private void OnAvatarMobStateChanged(Entity<CyberAvatarComponent> ent, ref MobStateChangedEvent args)
+    {
+        if (args.NewMobState != MobState.Dead || !IsJackedIn(ent.Comp.Body, out var avatar) || avatar != ent.Owner)
+            return;
+
+        JackOut(ent.Comp.Body, Loc.GetString("cyberspace-avatar-died"), true);
+        if (TryComp<StaminaComponent>(ent.Comp.Body, out var stamina))
+            _stamina.TakeStaminaDamage(ent.Comp.Body, stamina.CritThreshold, stamina, ignoreResist: true);
     }
 
     /// <summary>
