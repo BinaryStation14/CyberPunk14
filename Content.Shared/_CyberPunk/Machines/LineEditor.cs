@@ -1,8 +1,7 @@
 using System.Linq;
 using System.Text;
-using Content.Shared._CyberPunk.Machines;
 
-namespace Content.Server._CyberPunk.Wasm;
+namespace Content.Shared._CyberPunk.Machines;
 
 /// <summary>
 /// Turns keys into lines while the terminal isn't in raw mode, as a real terminal does: it echoes what's typed,
