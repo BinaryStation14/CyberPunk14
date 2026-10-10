@@ -1,0 +1,59 @@
+{
+    "version": 1,
+    "size": {
+        "x": 32,
+        "y": 32
+    },
+    "license": "CC-BY-SA-3.0",
+    "copyright": "Taken from tgstation at commit https://github.com/tgstation/tgstation/commit/fcf375d7d9ce6ceed5c7face899725e5655ab640, rotated and offset for data cables",
+    "states": [
+        {
+            "name": "datacable_0"
+        },
+        {
+            "name": "datacable_1"
+        },
+        {
+            "name": "datacable_2"
+        },
+        {
+            "name": "datacable_3"
+        },
+        {
+            "name": "datacable_4"
+        },
+        {
+            "name": "datacable_5"
+        },
+        {
+            "name": "datacable_6"
+        },
+        {
+            "name": "datacable_7"
+        },
+        {
+            "name": "datacable_8"
+        },
+        {
+            "name": "datacable_9"
+        },
+        {
+            "name": "datacable_10"
+        },
+        {
+            "name": "datacable_11"
+        },
+        {
+            "name": "datacable_12"
+        },
+        {
+            "name": "datacable_13"
+        },
+        {
+            "name": "datacable_14"
+        },
+        {
+            "name": "datacable_15"
+        }
+    ]
+}
