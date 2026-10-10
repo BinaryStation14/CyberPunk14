@@ -239,7 +239,12 @@ public sealed class CyberspaceTest : GameTest
             Assert.That(cyberspace.IsJackedIn(runner, out _), Is.False);
             Assert.That(_entMan.GetComponent<MindComponent>(minds.GetMind(runner)!.Value).VisitingEntity, Is.Null);
             Assert.That(cyberspace.NodeOf(avatar), Is.Null);
+        });
 
+        // The virtual body lets go of their mind at the end of the tick.
+        await Pair.RunTicksSync(1);
+        await server.WaitAssertion(() =>
+        {
             // Back in, then the deck leaves their hands.
             Assert.That(cyberspace.TryJackIn(runner, deck, accessPoint, true));
             Assert.That(cyberspace.IsJackedIn(runner, out var again) && again == avatar, "the same virtual body");
