@@ -16,8 +16,8 @@ namespace Content.Server._CyberPunk.Cyberspace;
 /// ICE, after Switchboard's <c>sb_sim/src/cyberspace/ice.rs</c>: guards that walk a network's region, each run by
 /// a program on one of the network's computers. A program asks for ICE with <c>ice_start</c> and it appears on its
 /// computer's pad. Before every machine tick the program is shown what its ICE sees; after it, the ICE carries
-/// out the program's orders: walk to a node or a tile, chase a runner, strike one in reach. ICE never leaves its
-/// region. It goes quietly when its program ends, and its program is halted when a runner derezzes it or its
+/// out the program's orders: walk to a node or a tile, chase a runner, strike one in reach. ICE keeps to its
+/// region unless it's engaging, and keeps behind firewalls while patrolling. It goes quietly when its program ends, and its program is halted when a runner derezzes it or its
 /// computer drops off the network.
 /// </summary>
 public sealed partial class CyberspaceSystem
@@ -44,9 +44,13 @@ public sealed partial class CyberspaceSystem
     /// <summary>The computers whose programs were shown ICE last tick.</summary>
     private readonly HashSet<EntityUid> _iceHosts = new();
 
+    /// <summary>The most tiles ICE chasing a runner off its network looks over for a way to them.</summary>
+    private const int IceChaseSearch = 40000;
+
     /// <summary>
     /// Where ICE walks: a region of a network, or a practice grid. Its nodes are in the order of its graph's pads,
-    /// and its links are pairs of indices into them.
+    /// and its links are pairs of indices into them. Zones say which side of the firewalls each node is on, if
+    /// there are any.
     /// </summary>
     private sealed record IceArea(
         int? Region,
@@ -54,7 +58,19 @@ public sealed partial class CyberspaceSystem
         CyberRect Rect,
         List<EntityUid> Nodes,
         List<(int A, int B)> Links,
-        EntityUid Home);
+        EntityUid Home,
+        List<int>? Zones = null)
+    {
+        /// <summary>The nodes on the same side of the firewalls as its home: where patrolling ICE goes.</summary>
+        public IEnumerable<EntityUid> HomeSide()
+        {
+            if (Zones is not { } zones)
+                return Nodes;
+
+            var home = zones[Nodes.IndexOf(Home)];
+            return Nodes.Where((_, i) => zones[i] == home);
+        }
+    }
 
     private void InitializeIce()
     {
@@ -79,7 +95,7 @@ public sealed partial class CyberspaceSystem
             }
 
             var nodes = region.Pads.Select(m => region.Nodes.GetValueOrDefault(m)).ToList();
-            return new IceArea(r, null, rect, nodes, graph.Links, home);
+            return new IceArea(r, null, rect, nodes, graph.Links, home, graph.Zones);
         }
 
         for (var slot = 0; slot < _sandboxes.Length; slot++)
@@ -157,7 +173,7 @@ public sealed partial class CyberspaceSystem
             switch (order.Kind)
             {
                 case IceOrderKind.Go:
-                    var node = area.Nodes.FirstOrDefault(n => n.Valid && NodeId(n) == (uint) order.A);
+                    var node = Walkable(ice, area).FirstOrDefault(n => n.Valid && NodeId(n) == (uint) order.A);
                     if (node.Valid)
                         ice.Comp.Target = new IceTarget(IceTargetKind.Node, node);
                     break;
@@ -174,6 +190,9 @@ public sealed partial class CyberspaceSystem
                         ice.Comp.Target = new IceTarget(IceTargetKind.Tile, X: order.A, Y: order.B);
                     break;
                 case IceOrderKind.Mode:
+                    if (ice.Comp.Mode != (IceMode) order.A)
+                        ice.Comp.Route.Clear();
+
                     ice.Comp.Mode = (IceMode) order.A;
                     _appearance.SetData(ice, IceVisuals.Mode, ice.Comp.Mode);
                     break;
@@ -313,7 +332,7 @@ public sealed partial class CyberspaceSystem
     private IceView ViewOf(Entity<IceComponent> ice, IceArea area, List<Entity<CyberAvatarComponent>> walking)
     {
         var pos = _transform.GetWorldPosition(ice);
-        var nodes = area.Nodes.Where(n => n.Valid && !TerminatingOrDeleted(n)).ToList();
+        var nodes = Walkable(ice, area).Where(n => n.Valid && !TerminatingOrDeleted(n)).ToList();
 
         int? NearestNode(Vector2 at, float within)
         {
@@ -354,7 +373,8 @@ public sealed partial class CyberspaceSystem
         {
             var at = _transform.GetWorldPosition(runner);
             var (x, y) = ((int) MathF.Floor(at.X), (int) MathF.Floor(at.Y));
-            if (!area.Rect.Contains(x, y) || !_interaction.InRangeUnobstructed(ice.Owner, runner.Owner, IceSight))
+            var mayChase = area.Rect.Contains(x, y) || ice.Comp.Mode == IceMode.Engaging;
+            if (!mayChase || !_interaction.InRangeUnobstructed(ice.Owner, runner.Owner, IceSight))
                 continue;
 
             var nearest = NearestNode(at, float.MaxValue) is { } n ? NodeId(area.Nodes[n]) : 0;
@@ -381,14 +401,56 @@ public sealed partial class CyberspaceSystem
     }
 
     /// <summary>
-    /// Walks ICE along the paths of its area towards its target, the shortest way. It gives up on a tile it has
-    /// no way to; a node or runner it keeps, standing still.
+    /// The nodes ICE may be sent to: all of its area's while it's searching or engaging, and only those on its own
+    /// side of the firewalls while it patrols.
+    /// </summary>
+    private static IEnumerable<EntityUid> Walkable(Entity<IceComponent> ice, IceArea area)
+    {
+        return ice.Comp.Mode == IceMode.Patrolling ? area.HomeSide() : area.Nodes;
+    }
+
+    /// <summary>
+    /// The tiles of the firewalls' pads in an area, which patrolling ICE doesn't cross.
+    /// </summary>
+    private HashSet<(int X, int Y)> FirewallTiles(IceArea area)
+    {
+        var tiles = new HashSet<(int X, int Y)>();
+        foreach (var node in area.Nodes)
+        {
+            if (!TryComp<CyberNodeComponent>(node, out var comp) || comp.Kind != CyberNodeKind.Firewall)
+                continue;
+
+            var centre = _transform.GetWorldPosition(node);
+            var (cx, cy) = ((int) MathF.Floor(centre.X), (int) MathF.Floor(centre.Y));
+            for (var dy = -1; dy <= 1; dy++)
+            {
+                for (var dx = -1; dx <= 1; dx++)
+                {
+                    tiles.Add((cx + dx, cy + dy));
+                }
+            }
+        }
+
+        return tiles;
+    }
+
+    /// <summary>
+    /// Walks ICE along the paths towards its target, the shortest way. It keeps to its area and doesn't cross
+    /// firewalls while patrolling, except to get back to its own side; engaging, it follows a runner anywhere,
+    /// and once it stops it comes back to its area. It gives up on a tile it has no way to; a node or runner it
+    /// keeps, standing still.
     /// </summary>
     private void WalkIce(Entity<IceComponent> ice, IceArea area, float frameTime)
     {
+        var pos = _transform.GetWorldPosition(ice);
+        var from = ((int) MathF.Floor(pos.X), (int) MathF.Floor(pos.Y));
+        var engaging = ice.Comp.Mode == IceMode.Engaging;
+        var away = !area.Rect.Contains(from.Item1, from.Item2);
+
         var target = ice.Comp.Target;
         Vector2? goal = target.Kind switch
         {
+            _ when away && !engaging => _transform.GetWorldPosition(area.Home),
             IceTargetKind.Node when target.Entity is { } node && !TerminatingOrDeleted(node)
                 => _transform.GetWorldPosition(node),
             IceTargetKind.Runner when target.Entity is { } runner && RunnerById(GetNetEntity(runner).Id) != null
@@ -398,26 +460,34 @@ public sealed partial class CyberspaceSystem
         };
 
         var goalTile = goal is { } g ? ((int) MathF.Floor(g.X), (int) MathF.Floor(g.Y)) : default;
-        if (goal == null || target.Kind == IceTargetKind.Runner && !area.Rect.Contains(goalTile.Item1, goalTile.Item2))
+        var chasingOut = target.Kind == IceTargetKind.Runner && !area.Rect.Contains(goalTile.Item1, goalTile.Item2);
+        if (goal == null || chasingOut && !engaging && !away)
         {
             ice.Comp.Target = IceTarget.Idle;
             return;
         }
 
-        var pos = _transform.GetWorldPosition(ice);
-        var arrive = target.Kind == IceTargetKind.Runner ? 0.6f * StrikeReach : 0.06f;
+        var returning = away && !engaging;
+        var arrive = target.Kind == IceTargetKind.Runner && !returning ? 0.6f * StrikeReach : 0.06f;
         if ((goal.Value - pos).Length() <= arrive)
         {
-            if (target.Kind != IceTargetKind.Runner)
+            if (target.Kind != IceTargetKind.Runner && !returning)
                 ice.Comp.Target = IceTarget.Idle;
 
             return;
         }
 
-        var from = ((int) MathF.Floor(pos.X), (int) MathF.Floor(pos.Y));
         if (ice.Comp.RouteGoal != goalTile || ice.Comp.Route.Count == 0)
         {
-            if (TilePath(area.Rect, from, goalTile) is not { } path)
+            // Off its area it may go anywhere; on it, it keeps to it, and patrolling it keeps off the firewalls
+            // unless that's the only way back to its side.
+            var rect = engaging || away ? (CyberRect?) null : area.Rect;
+            var path = ice.Comp.Mode == IceMode.Patrolling && !away
+                ? TilePath(rect, from, goalTile, FirewallTiles(area))
+                  ?? (target.Kind == IceTargetKind.Node ? TilePath(rect, from, goalTile) : null)
+                : TilePath(rect, from, goalTile);
+
+            if (path == null)
             {
                 ice.Comp.Route.Clear();
                 ice.Comp.RouteGoal = null;
@@ -456,10 +526,12 @@ public sealed partial class CyberspaceSystem
     }
 
     /// <summary>
-    /// The shortest way over walkable tiles inside a rectangle, from one tile to another, without the first; null
-    /// if there's none.
+    /// The shortest way over walkable tiles, from one tile to another, without the first; null if there's none.
+    /// It keeps inside a rectangle and off some tiles, if given; with no rectangle it looks over at most
+    /// <see cref="IceChaseSearch"/> tiles.
     /// </summary>
-    private List<(int X, int Y)>? TilePath(CyberRect rect, (int X, int Y) from, (int X, int Y) to)
+    private List<(int X, int Y)>? TilePath(CyberRect? rect, (int X, int Y) from, (int X, int Y) to,
+        HashSet<(int X, int Y)>? blocked = null)
     {
         if (from == to)
             return new List<(int X, int Y)> { to };
@@ -467,13 +539,18 @@ public sealed partial class CyberspaceSystem
         var came = new Dictionary<(int X, int Y), (int X, int Y)> { [from] = from };
         var queue = new Queue<(int X, int Y)>();
         queue.Enqueue(from);
-        while (queue.TryDequeue(out var at))
+        while (queue.TryDequeue(out var at) && came.Count < IceChaseSearch)
         {
             foreach (var (dx, dy) in SpurDirections)
             {
                 var n = (at.X + dx, at.Y + dy);
-                if (came.ContainsKey(n) || !rect.Contains(n.Item1, n.Item2) || !CyberLayout.Walkable(FloorAt(n.Item1, n.Item2)))
+                if (came.ContainsKey(n)
+                    || rect is { } r && !r.Contains(n.Item1, n.Item2)
+                    || blocked != null && blocked.Contains(n)
+                    || !CyberLayout.Walkable(FloorAt(n.Item1, n.Item2)))
+                {
                     continue;
+                }
 
                 came[n] = at;
                 if (n == to)
