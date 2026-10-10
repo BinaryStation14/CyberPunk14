@@ -39,7 +39,6 @@ public sealed partial class CyberspaceSystem : EntitySystem
     [Dependency] private IRobustRandom _random = default!;
     [Dependency] private MetaDataSystem _meta = default!;
     [Dependency] private SharedMapSystem _map = default!;
-    [Dependency] private SharedPhysicsSystem _physics = default!;
     [Dependency] private SharedTransformSystem _transform = default!;
 
     /// <summary>Regions kept spare for networks built during the round.</summary>
@@ -640,8 +639,6 @@ public sealed partial class CyberspaceSystem : EntitySystem
             }
 
             _fixtures.FixtureUpdate(barrier);
-            // It's spawned without fixtures, so it can't collide until it has them.
-            _physics.SetCanCollide(barrier, true);
             _barriers[chunk] = barrier;
         }
 

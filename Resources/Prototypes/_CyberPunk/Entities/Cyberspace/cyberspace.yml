@@ -9,8 +9,15 @@
   components:
   - type: Physics
     bodyType: Static
-    canCollide: false
+  # CyberspaceSystem gives it its walls at runtime. A client applies the body's state before its fixtures', and won't
+  # let a body without fixtures collide, so it starts with one that touches nothing.
   - type: Fixtures
+    fixtures:
+      placeholder:
+        shape:
+          !type:PhysShapeCircle
+          radius: 0.1
+        hard: false
 
 - type: entity
   abstract: true
