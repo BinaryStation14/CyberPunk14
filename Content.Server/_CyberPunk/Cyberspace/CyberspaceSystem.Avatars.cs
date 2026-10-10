@@ -1,12 +1,16 @@
+using System.Numerics;
 using Content.Server.Cloning;
+using Content.Shared._CyberPunk.Cyberspace;
+using Content.Shared.Access.Components;
 using Content.Shared.Body;
 using Content.Shared.Cloning;
+using Content.Shared.Examine;
 using Content.Shared.Humanoid;
 using Content.Shared.Humanoid.Prototypes;
 using Content.Shared.Inventory;
 using Content.Shared.Preferences;
-using Content.Shared.Storage;
-using Content.Shared.Whitelist;
+using Content.Shared.Roles;
+using Content.Shared.Station.Systems;
 using Robust.Shared.Containers;
 using Robust.Shared.Prototypes;
 
@@ -14,27 +18,35 @@ namespace Content.Server._CyberPunk.Cyberspace;
 
 /// <summary>
 /// A runner's virtual body takes their shape: the outside of their species' body, coloured and marked like
-/// theirs, their voice, and copies of the clothes they wear. Its species is its own, so it doesn't breathe, eat
-/// or feel the cold, and it bleeds ghostlight.
+/// theirs, and their voice. It wears a runner's uniform and a proxy of whatever ID their real body wears, and
+/// shows in a colour of their own. Its species is its own, so it doesn't breathe, eat or feel the cold, and it
+/// bleeds ghostlight.
 /// </summary>
 public sealed partial class CyberspaceSystem
 {
     [Dependency] private CloningSystem _cloning = default!;
-    [Dependency] private EntityWhitelistSystem _whitelist = default!;
     [Dependency] private HumanoidProfileSystem _humanoid = default!;
     [Dependency] private InventorySystem _inventory = default!;
     [Dependency] private OrganRelationSystem _organs = default!;
+    [Dependency] private StationSpawningSystem _spawning = default!;
     [Dependency] private SharedContainerSystem _container = default!;
     [Dependency] private SharedVisualBodySystem _visualBody = default!;
 
     private static readonly ProtoId<SpeciesPrototype> AvatarSpecies = "CyberAvatar";
     private static readonly ProtoId<CloningSettingsPrototype> AvatarCloning = "CyberAvatar";
+    private static readonly ProtoId<StartingGearPrototype> AvatarGear = "CyberAvatar";
 
-    private void TakeShape(EntityUid avatar, EntityUid body)
+    private void InitializeAvatars()
+    {
+        SubscribeLocalEvent<CyberProxyIdComponent, GetAdditionalAccessEvent>(OnProxyIdAccess);
+        SubscribeLocalEvent<CyberProxyIdComponent, ExaminedEvent>(OnProxyIdExamined);
+    }
+
+    private void TakeShape(EntityUid avatar, Entity<NetrunnerComponent> body)
     {
         var profile = CompOrNull<HumanoidProfileComponent>(body);
         GrowBody(avatar, profile?.Species ?? HumanoidCharacterProfile.DefaultSpecies);
-        _visualBody.CopyAppearanceFrom(body, avatar);
+        _visualBody.CopyAppearanceFrom(body.Owner, avatar);
 
         if (profile != null)
         {
@@ -47,9 +59,41 @@ public sealed partial class CyberspaceSystem
                     .WithVoice(profile.Voice));
         }
 
-        var settings = ProtoMan.Index(AvatarCloning);
-        _cloning.CloneComponents(body, avatar, settings);
-        Dress(avatar, body, settings);
+        _cloning.CloneComponents(body, avatar, ProtoMan.Index(AvatarCloning));
+        _spawning.EquipStartingGear(avatar, AvatarGear);
+
+        body.Comp.Tint ??= Color.FromHsv(new Vector4(_random.NextFloat(), 0.75f, 1f, 1f));
+        var look = EnsureComp<CyberAvatarLookComponent>(avatar);
+        look.Tint = body.Comp.Tint.Value;
+        Dirty(avatar, look);
+    }
+
+    private void OnProxyIdAccess(Entity<CyberProxyIdComponent> ent, ref GetAdditionalAccessEvent args)
+    {
+        if (ReflectedId(ent) is { } id)
+            args.Entities.Add(id);
+    }
+
+    private void OnProxyIdExamined(Entity<CyberProxyIdComponent> ent, ref ExaminedEvent args)
+    {
+        args.PushMarkup(ReflectedId(ent) is { } id
+            ? Loc.GetString("cyberspace-proxy-id-reflects", ("id", id))
+            : Loc.GetString("cyberspace-proxy-id-blank"));
+    }
+
+    /// <summary>
+    /// The ID worn by the real body of the runner whose avatar wears this proxy.
+    /// </summary>
+    private EntityUid? ReflectedId(EntityUid proxy)
+    {
+        if (!_container.TryGetContainingContainer(proxy, out var container)
+            || !TryComp<CyberAvatarComponent>(container.Owner, out var avatar)
+            || !_inventory.TryGetSlotEntity(avatar.Body, "id", out var id))
+        {
+            return null;
+        }
+
+        return id;
     }
 
     /// <summary>
@@ -84,31 +128,6 @@ public sealed partial class CyberspaceSystem
                 if (grown.TryGetValue(child, out var childUid))
                     _organs.Relate(parentUid, childUid);
             }
-        }
-    }
-
-    /// <summary>
-    /// Dresses the avatar in copies of what the body wears, with nothing in their pockets or bags.
-    /// </summary>
-    private void Dress(EntityUid avatar, EntityUid body, CloningSettingsPrototype settings)
-    {
-        if (settings.CopyEquipment is not { } slots)
-            return;
-
-        var coords = Transform(avatar).Coordinates;
-        var worn = _inventory.GetSlotEnumerator(body, slots);
-        while (worn.NextItem(out var item, out var slot))
-        {
-            if (Prototype(item) is not { } proto
-                || !_whitelist.CheckBoth(item, settings.EquipmentBlacklist, settings.EquipmentWhitelist))
-                continue;
-
-            var copy = Spawn(proto.ID, coords);
-            if (TryComp<StorageComponent>(copy, out var storage))
-                _container.CleanContainer(storage.Container);
-
-            if (!_inventory.TryEquip(avatar, copy, slot.Name, silent: true))
-                Del(copy);
         }
     }
 }

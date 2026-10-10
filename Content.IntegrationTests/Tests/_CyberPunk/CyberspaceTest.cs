@@ -6,7 +6,9 @@ using Content.IntegrationTests.Fixtures;
 using Content.Server._CyberPunk.Cyberspace;
 using Content.Server._CyberPunk.Machines;
 using Content.Server.Body.Components;
+using Content.Shared._CyberPunk.Cyberspace;
 using Content.Shared._CyberPunk.Machines;
+using Content.Shared.Access;
 using Content.Shared.Access.Components;
 using Content.Shared.Access.Systems;
 using Content.Shared.Body;
@@ -18,12 +20,11 @@ using Content.Shared.Interaction;
 using Content.Shared.Inventory;
 using Content.Shared.Mind;
 using Content.Shared.Power.EntitySystems;
-using Content.Shared.Storage;
-using Content.Shared.Storage.EntitySystems;
 using Robust.Shared.GameObjects;
 using Robust.Shared.Map;
 using Robust.Shared.Map.Components;
 using Robust.Shared.Maths;
+using Robust.Shared.Prototypes;
 
 namespace Content.IntegrationTests.Tests._CyberPunk;
 
@@ -274,8 +275,9 @@ public sealed class CyberspaceTest : GameTest
     }
 
     /// <summary>
-    /// A virtual body takes its runner's shape: their species' body with its hands and markings, and copies of
-    /// their clothes with nothing in them. It's an avatar, though: it doesn't breathe, and it bleeds ghostlight.
+    /// A virtual body takes its runner's shape: their species' body with its hands and markings. It wears a
+    /// runner's uniform, not their clothes, and a proxy ID that opens what their body's ID opens, whichever that
+    /// is now. It's an avatar, though: it doesn't breathe, and it bleeds ghostlight.
     /// </summary>
     [Test]
     public async Task AvatarsLookLikeTheirRunners()
@@ -289,6 +291,7 @@ public sealed class CyberspaceTest : GameTest
         var godmode = _entMan.System<SharedGodmodeSystem>();
         var inventory = _entMan.System<InventorySystem>();
         var visualBody = _entMan.System<SharedVisualBodySystem>();
+        var access = _entMan.System<AccessReaderSystem>();
 
         await server.WaitAssertion(() =>
         {
@@ -299,9 +302,7 @@ public sealed class CyberspaceTest : GameTest
             var (runner, deck) = Runner(minds, hands, godmode, 0, 0, "MobReptilian");
             Assert.That(inventory.TryEquip(runner, Place("ClothingUniformJumpsuitColorGrey", 0, 0), "jumpsuit", force: true));
             Assert.That(inventory.TryEquip(runner, Place("ClothingHeadsetGrey", 0, 0), "ears", force: true));
-            var backpack = Place("ClothingBackpack", 0, 0);
-            Assert.That(inventory.TryEquip(runner, backpack, "back", force: true));
-            Assert.That(_entMan.System<SharedStorageSystem>().Insert(backpack, Place("ClothingShoesColorBlack", 0, 0), out _, playSound: false));
+            Assert.That(inventory.TryEquip(runner, Place("CaptainIDCard", 0, 0), "id", force: true));
 
             Assert.That(cyberspace.TryPractise(runner, deck));
             Assert.That(cyberspace.IsJackedIn(runner, out var a));
@@ -317,10 +318,18 @@ public sealed class CyberspaceTest : GameTest
             Assert.That(Markings(visualBody, avatar), Does.Contain("LizardTailSmooth"));
 
             Assert.That(inventory.TryGetSlotEntity(avatar, "jumpsuit", out var jumpsuit));
-            Assert.That(_entMan.GetComponent<MetaDataComponent>(jumpsuit!.Value).EntityPrototype!.ID, Is.EqualTo("ClothingUniformJumpsuitColorGrey"));
-            Assert.That(inventory.TryGetSlotEntity(avatar, "ears", out _), Is.False, "no radio");
-            Assert.That(inventory.TryGetSlotEntity(avatar, "back", out var avatarBackpack));
-            Assert.That(_entMan.GetComponent<StorageComponent>(avatarBackpack!.Value).Container.ContainedEntities, Is.Empty);
+            Assert.That(_entMan.GetComponent<MetaDataComponent>(jumpsuit!.Value).EntityPrototype!.ID, Is.EqualTo("ClothingUniformCyberAvatar"));
+            Assert.That(inventory.TryGetSlotEntity(avatar, "ears", out _), Is.False, "none of their clothes");
+            Assert.That(_entMan.GetComponent<CyberAvatarLookComponent>(avatar).Tint, Is.Not.EqualTo(Color.White));
+
+            Assert.That(inventory.TryGetSlotEntity(avatar, "id", out var proxy));
+            Assert.That(_entMan.HasComponent<CyberProxyIdComponent>(proxy), "a proxy ID");
+            Assert.That(inventory.TryUnequip(avatar, "id"), Is.False, "it doesn't come off");
+            Assert.That(access.FindAccessTags(avatar), Does.Contain(new ProtoId<AccessLevelPrototype>("Captain")));
+
+            Assert.That(inventory.TryUnequip(runner, "id"));
+            Assert.That(access.FindAccessTags(avatar), Does.Not.Contain(new ProtoId<AccessLevelPrototype>("Captain")),
+                "it shows the ID their body wears now");
 
             cyberspace.JackOut(runner, "", false);
         });

@@ -12,9 +12,9 @@ using Robust.Shared.Player;
 namespace Content.Server._CyberPunk.Cyberspace;
 
 /// <summary>
-/// Using a node in cyberspace opens its machine's UI, as if the runner stood at the machine. A runner carries
-/// their real body's access; a machine whose access they lack opens once they've stood at its node for
-/// <see cref="BreachTime"/>. The UI closes when they walk <see cref="NodeReach"/> from the node or jack out.
+/// Using a node in cyberspace opens its machine's UI, as if the runner stood at the machine. A runner wears a
+/// proxy of the ID their real body wears; a machine whose access they lack opens once they've stood at its node
+/// for <see cref="BreachTime"/>. The UI closes when they walk <see cref="NodeReach"/> from the node or jack out.
 /// </summary>
 /// <remarks>
 /// The engine closes any UI whose user is on another map than its machine, unless the UI has no range. So while
@@ -57,7 +57,6 @@ public sealed partial class CyberspaceSystem
     {
         SubscribeLocalEvent<CyberNodeComponent, ActivateInWorldEvent>(OnNodeActivate);
         SubscribeLocalEvent<CyberAvatarComponent, CyberBreachDoAfterEvent>(OnBreached);
-        SubscribeLocalEvent<CyberAvatarComponent, GetAdditionalAccessEvent>(OnAvatarAccess);
         SubscribeLocalEvent<BoundUserInterfaceMessageAttempt>(OnRemoteUiMessageAttempt);
     }
 
@@ -82,11 +81,6 @@ public sealed partial class CyberspaceSystem
         ent.Comp.Breached.Add(machine);
         _popup.PopupEntity(Loc.GetString("cyberspace-breached", ("node", args.Target.Value)), ent, ent);
         UseNode(ent, (args.Target.Value, node));
-    }
-
-    private void OnAvatarAccess(Entity<CyberAvatarComponent> ent, ref GetAdditionalAccessEvent args)
-    {
-        args.Entities.Add(ent.Comp.Body);
     }
 
     /// <summary>

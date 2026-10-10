@@ -37,6 +37,12 @@ public sealed partial class NetrunnerComponent : Component
     /// </summary>
     [ViewVariables]
     public JackIn? JackedIn;
+
+    /// <summary>
+    /// The colour their virtual body shows in, picked at random on their first jack-in.
+    /// </summary>
+    [ViewVariables]
+    public Color? Tint;
 }
 
 /// <summary>
@@ -69,3 +75,9 @@ public sealed partial class CyberAvatarComponent : Component
     [ViewVariables]
     public HashSet<EntityUid> Breached = new();
 }
+
+/// <summary>
+/// A runner's virtual ID. It holds no access of its own: it opens whatever the ID their real body wears opens.
+/// </summary>
+[RegisterComponent, Access(typeof(CyberspaceSystem))]
+public sealed partial class CyberProxyIdComponent : Component;
