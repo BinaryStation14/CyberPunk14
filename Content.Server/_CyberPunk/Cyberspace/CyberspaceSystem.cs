@@ -468,7 +468,13 @@ public sealed partial class CyberspaceSystem : EntitySystem
                 zones[Find(a)] = Find(b);
         }
 
-        return zones.Select((_, i) => firewalls[i] ? -1 : Find(i)).ToList();
+        var result = new List<int>(firewalls.Count);
+        for (var i = 0; i < firewalls.Count; i++)
+        {
+            result.Add(firewalls[i] ? -1 : Find(i));
+        }
+
+        return result;
     }
 
     /// <summary>
