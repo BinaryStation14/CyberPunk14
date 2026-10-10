@@ -20,6 +20,7 @@ using Content.Shared.Interaction;
 using Content.Shared.Inventory;
 using Content.Shared.Mind;
 using Content.Shared.Power.EntitySystems;
+using Content.Shared.UserInterface;
 using Robust.Shared.GameObjects;
 using Robust.Shared.Map;
 using Robust.Shared.Map.Components;
@@ -449,6 +450,78 @@ public sealed class CyberspaceTest : GameTest
                 Assert.That(ui.TryGetInterfaceData(machine, MachineTerminalUiKey.Key, out var data));
                 Assert.That(data!.InteractionRange, Is.EqualTo(range), "the range comes back");
             }
+        });
+    }
+
+    /// <summary>
+    /// Consoles on data cable get nodes like any machine with a UI, and a runner opens them from there.
+    /// </summary>
+    [Test]
+    [TestCase("ComputerCrewMonitoring")]
+    [TestCase("ComputerPowerMonitoring")]
+    [TestCase("ComputerStationRecords")]
+    public async Task RunnersOpenConsolesFromTheirNodes(string prototype)
+    {
+        var server = Pair.Server;
+        _entMan = server.ResolveDependency<IEntityManager>();
+        var cyberspace = _entMan.System<CyberspaceSystem>();
+        var mapSys = _entMan.System<SharedMapSystem>();
+        var power = _entMan.System<SharedPowerReceiverSystem>();
+        var minds = _entMan.System<SharedMindSystem>();
+        var hands = _entMan.System<SharedHandsSystem>();
+        var godmode = _entMan.System<SharedGodmodeSystem>();
+        var interaction = _entMan.System<SharedInteractionSystem>();
+        var ui = _entMan.System<SharedUserInterfaceSystem>();
+
+        EntityUid console = default, accessPoint = default, runner = default, deck = default;
+        await server.WaitAssertion(() =>
+        {
+            mapSys.CreateMap(out var mapId);
+            _grid = mapSys.CreateGridEntity(mapId);
+            for (var x = 0; x < 6; x++)
+            {
+                for (var y = 0; y < 3; y++)
+                {
+                    mapSys.SetTile(_grid, new Vector2i(x, y), new Tile(1));
+                }
+
+                Place("CableData", x, 0);
+            }
+
+            console = Place(prototype, 0, 0);
+            accessPoint = Place("AccessPoint", 3, 0);
+            var router = Place("NetworkRouter", 1, 1);
+            foreach (var ent in new[] { console, accessPoint, router })
+            {
+                power.SetNeedsPower(ent, false);
+            }
+
+            (runner, deck) = Runner(minds, hands, godmode, 3, 1);
+        });
+
+        await server.WaitRunTicks(30);
+
+        await server.WaitAssertion(() =>
+        {
+            var node = cyberspace.NodeOf(console);
+            Assert.That(node, Is.Not.Null, "the console has a node");
+            Assert.That(Name(node!.Value), Does.StartWith("device 10."));
+
+            Assert.That(cyberspace.TryJackIn(runner, deck, accessPoint, true));
+            Assert.That(cyberspace.IsJackedIn(runner, out var avatar));
+
+            var key = _entMan.GetComponent<ActivatableUIComponent>(console).Key;
+            Stand(avatar!.Value, node.Value);
+            interaction.InteractionActivate(avatar.Value, node.Value);
+            Assert.That(ui.IsUiOpen(console, key, avatar.Value));
+        });
+
+        await server.WaitRunTicks(10);
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(cyberspace.IsJackedIn(runner, out var avatar));
+            Assert.That(ui.IsUiOpen(console, _entMan.GetComponent<ActivatableUIComponent>(console).Key, avatar!.Value),
+                "it stays open across maps");
         });
     }
 
