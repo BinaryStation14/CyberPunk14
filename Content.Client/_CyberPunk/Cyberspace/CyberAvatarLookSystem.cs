@@ -34,6 +34,10 @@ public sealed partial class CyberAvatarLookSystem : EntitySystem
 
     private void OnState(Entity<CyberAvatarLookComponent> ent, ref AfterAutoHandleStateEvent args)
     {
+        // A new entity's first state comes before its sprite is initialised; startup applies it then.
+        if (!ent.Comp.Running)
+            return;
+
         Apply(ent);
     }
 

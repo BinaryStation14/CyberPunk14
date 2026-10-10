@@ -78,7 +78,7 @@ public sealed class CyberspaceTest : GameTest
             }
         });
 
-        await server.WaitRunTicks(30);
+        await Pair.RunTicksSync(30);
 
         Vector2i bTile = default;
         await server.WaitAssertion(() =>
@@ -133,7 +133,7 @@ public sealed class CyberspaceTest : GameTest
             _entMan.DeleteEntity(gap);
         });
 
-        await server.WaitRunTicks(10);
+        await Pair.RunTicksSync(10);
         await server.WaitAssertion(() =>
         {
             Assert.That(cyberspace.NodeOf(b), Is.Null, "an unplugged machine has no pad");
@@ -141,7 +141,7 @@ public sealed class CyberspaceTest : GameTest
             Place("CableData", 4, 0);
         });
 
-        await server.WaitRunTicks(10);
+        await Pair.RunTicksSync(10);
         await server.WaitAssertion(() =>
         {
             Assert.That(cyberspace.NodeOf(b), Is.Not.Null);
@@ -151,7 +151,7 @@ public sealed class CyberspaceTest : GameTest
             power.SetNeedsPower(router, true);
         });
 
-        await server.WaitRunTicks(10);
+        await Pair.RunTicksSync(10);
         await server.WaitAssertion(() =>
         {
             Assert.That(cyberspace.NodeOf(router), Is.Null);
@@ -204,7 +204,7 @@ public sealed class CyberspaceTest : GameTest
             (other, otherDeck) = Runner(minds, hands, godmode, 5, 2);
         });
 
-        await server.WaitRunTicks(30);
+        await Pair.RunTicksSync(30);
 
         EntityUid avatar = default;
         await server.WaitAssertion(() =>
@@ -225,7 +225,7 @@ public sealed class CyberspaceTest : GameTest
             Assert.That(at, Is.Not.EqualTo(Tile(cyberspace.NodeOf(accessPoint)!.Value)));
         });
 
-        await server.WaitRunTicks(10);
+        await Pair.RunTicksSync(10);
         await server.WaitAssertion(() =>
         {
             var address = machines.AddressOf(avatar);
@@ -246,7 +246,7 @@ public sealed class CyberspaceTest : GameTest
             hands.TryDrop(runner, deck, checkActionBlocker: false);
         });
 
-        await server.WaitRunTicks(5);
+        await Pair.RunTicksSync(5);
         await server.WaitAssertion(() =>
         {
             Assert.That(cyberspace.IsJackedIn(runner, out _), Is.False, "losing the deck throws them out");
@@ -261,7 +261,7 @@ public sealed class CyberspaceTest : GameTest
             Assert.That(Reaches(cyberspace, at, Tile(cyberspace.NodeOf(accessPoint)!.Value)), Is.False, "practice is cut off");
         });
 
-        await server.WaitRunTicks(10);
+        await Pair.RunTicksSync(10);
         await server.WaitAssertion(() =>
         {
             Assert.That(cyberspace.IsJackedIn(other, out var practising));
@@ -395,7 +395,7 @@ public sealed class CyberspaceTest : GameTest
             (rival, rivalDeck) = Runner(minds, hands, godmode, 4, 1);
         });
 
-        await server.WaitRunTicks(30);
+        await Pair.RunTicksSync(30);
 
         EntityUid avatar = default, rivalAvatar = default;
         float range = default;
@@ -412,7 +412,7 @@ public sealed class CyberspaceTest : GameTest
             Assert.That(ui.IsUiOpen(computer, MachineTerminalUiKey.Key, avatar));
         });
 
-        await server.WaitRunTicks(10);
+        await Pair.RunTicksSync(10);
         await server.WaitAssertion(() =>
         {
             Assert.That(ui.IsUiOpen(computer, MachineTerminalUiKey.Key, avatar), "it stays open across maps");
@@ -430,7 +430,7 @@ public sealed class CyberspaceTest : GameTest
             Assert.That(ui.IsUiOpen(avatar, MachineTerminalUiKey.Key, rivalAvatar), Is.False, "another runner's deck is locked");
         });
 
-        await server.WaitRunTicks(250);
+        await Pair.RunTicksSync(250);
         await server.WaitAssertion(() =>
         {
             Assert.That(ui.IsUiOpen(locked, MachineTerminalUiKey.Key, avatar), "breached, it opens");
@@ -441,7 +441,7 @@ public sealed class CyberspaceTest : GameTest
             cyberspace.JackOut(runner, "", false);
         });
 
-        await server.WaitRunTicks(2);
+        await Pair.RunTicksSync(2);
         await server.WaitAssertion(() =>
         {
             foreach (var machine in new[] { computer, locked })
@@ -492,7 +492,7 @@ public sealed class CyberspaceTest : GameTest
             (runner, deck) = Runner(minds, hands, godmode, 1, 1);
         });
 
-        await server.WaitRunTicks(30);
+        await Pair.RunTicksSync(30);
 
         CyberRect small = default;
         var machines = new List<EntityUid>();
@@ -508,7 +508,7 @@ public sealed class CyberspaceTest : GameTest
             }
         });
 
-        await server.WaitRunTicks(30);
+        await Pair.RunTicksSync(30);
         await server.WaitAssertion(() =>
         {
             var rect = cyberspace.RegionRect(cyberspace.RegionOf(router)!.Value)!.Value;
@@ -571,7 +571,7 @@ public sealed class CyberspaceTest : GameTest
             (runner, deck) = Runner(minds, hands, godmode, 3, 1);
         });
 
-        await server.WaitRunTicks(30);
+        await Pair.RunTicksSync(30);
 
         // One built on cable once the network's up, and one that has cable run to it.
         EntityUid builtOnCable = default, cabledLater = default;
@@ -583,14 +583,14 @@ public sealed class CyberspaceTest : GameTest
             power.SetNeedsPower(cabledLater, false);
         });
 
-        await server.WaitRunTicks(10);
+        await Pair.RunTicksSync(10);
         await server.WaitAssertion(() =>
         {
             Place("CableData", 4, 1);
             Place("CableData", 4, 2);
         });
 
-        await server.WaitRunTicks(10);
+        await Pair.RunTicksSync(10);
         await server.WaitAssertion(() =>
         {
             Assert.That(cyberspace.NodeOf(builtOnCable), Is.Not.Null, "a console built on cable has a node");
@@ -609,7 +609,7 @@ public sealed class CyberspaceTest : GameTest
             Assert.That(ui.IsUiOpen(console, key, avatar.Value));
         });
 
-        await server.WaitRunTicks(10);
+        await Pair.RunTicksSync(10);
         await server.WaitAssertion(() =>
         {
             Assert.That(cyberspace.IsJackedIn(runner, out var avatar));

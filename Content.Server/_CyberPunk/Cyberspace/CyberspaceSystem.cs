@@ -180,7 +180,8 @@ public sealed partial class CyberspaceSystem : EntitySystem
                 return node;
         }
 
-        return null;
+        // A deck's node is on its spur, not a pad.
+        return _spurs.TryGetValue(machine, out var spur) ? spur.Node : null;
     }
 
     private void OnNetworksRebuilt(ref MachineNetworksRebuiltEvent ev)
@@ -341,12 +342,11 @@ public sealed partial class CyberspaceSystem : EntitySystem
         CyberRect? moved = null;
         if (region.Cells == null || !region.Shape.Fits(hosts.Count, switches.Count))
         {
+            // The old place is cleared once the new one is painted, so no chunk of the grid empties and fills
+            // again in between.
             moved = region.Cells;
             if (moved is { } old)
-            {
-                ClearTiles(CyberLayout.Tiles(old));
                 _layout!.Free(old);
-            }
 
             region.Shape = RegionShape.For(hosts.Count, switches.Count);
             region.Cells = _layout!.Place(region.Shape);
@@ -436,7 +436,10 @@ public sealed partial class CyberspaceSystem : EntitySystem
         RestampSpurs(r);
 
         if (moved is { } from)
+        {
+            ClearOutside(CyberLayout.Tiles(from), CyberLayout.Tiles(region.Cells!.Value));
             MoveRunners(r, CyberLayout.Tiles(from));
+        }
     }
 
     /// <summary>
@@ -472,6 +475,24 @@ public sealed partial class CyberspaceSystem : EntitySystem
     private void ClearTiles(CyberRect rect)
     {
         Paint(rect, new CyberFloor[rect.W * rect.H]);
+    }
+
+    /// <summary>
+    /// Clears the tiles of a rectangle that aren't in another.
+    /// </summary>
+    private void ClearOutside(CyberRect rect, CyberRect keep)
+    {
+        var tiles = new CyberFloor[rect.W * rect.H];
+        for (var y = 0; y < rect.H; y++)
+        {
+            for (var x = 0; x < rect.W; x++)
+            {
+                if (keep.Contains(rect.X + x, rect.Y + y))
+                    tiles[y * rect.W + x] = FloorAt(rect.X + x, rect.Y + y);
+            }
+        }
+
+        Paint(rect, tiles);
     }
 
     /// <summary>
@@ -670,8 +691,9 @@ public sealed partial class CyberspaceSystem : EntitySystem
         if (_mapUid is not { } mapUid || !TryComp<MapGridComponent>(mapUid, out var grid))
             return;
 
-        // Tiles cleared go in before tiles laid: the explosion system's edge map counts a batch that does both at
-        // once twice over.
+        // Tiles laid go in before tiles cleared, in batches of their own: the explosion system's edge map counts a
+        // batch that does both at once twice over, and a chunk that empties and fills again before a client catches
+        // up is sent to it as deleted twice, which the engine can't serialise.
         var cleared = new List<(Vector2i, Tile)>();
         var laid = new List<(Vector2i, Tile)>();
         for (var y = 0; y < rect.H; y++)
@@ -693,10 +715,10 @@ public sealed partial class CyberspaceSystem : EntitySystem
             }
         }
 
-        if (cleared.Count > 0)
-            _map.SetTiles(mapUid, grid, cleared);
         if (laid.Count > 0)
             _map.SetTiles(mapUid, grid, laid);
+        if (cleared.Count > 0)
+            _map.SetTiles(mapUid, grid, cleared);
 
         // The barriers on the tiles just round it may change too.
         for (var cy = ChunkOf(rect.Y - 1); cy <= ChunkOf(rect.Y + rect.H); cy++)
