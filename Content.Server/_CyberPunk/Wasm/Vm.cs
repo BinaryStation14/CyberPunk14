@@ -617,6 +617,22 @@ public sealed class Vm : IDisposable
     }
 
     /// <summary>
+    /// Tells a program that a firewall was breached at <paramref name="at"/>: its <c>on_breach_signal</c> runs
+    /// just before its next tick. Nothing if it has no such hook.
+    /// </summary>
+    public void SignalBreach(uint pid, (int X, int Y) at)
+    {
+        if (State != VmState.Running)
+            return;
+
+        foreach (var process in _procs.Concat(_jobs.SelectMany(j => j.Procs)))
+        {
+            if (process.Pid == pid && process.BreachHook != null)
+                process.Breaches.Add(at);
+        }
+    }
+
+    /// <summary>
     /// Whether the program in front vets people opening the door by hand.
     /// </summary>
     public bool GuardsDoor => State == VmState.Running && _procs.Count > 0 && _procs[^1] is { Started: true, DoorHook: not null };
@@ -818,6 +834,29 @@ public sealed class Vm : IDisposable
                 return (0, false, false);
 
             call = process.TickHook;
+            if (process.BreachHook is { } breach && process.Breaches.Count > 0)
+            {
+                var breaches = process.Breaches.ToList();
+                process.Breaches.Clear();
+                var tick = call;
+                call = () =>
+                {
+                    try
+                    {
+                        foreach (var at in breaches)
+                        {
+                            _io.Breach = at;
+                            breach();
+                        }
+                    }
+                    finally
+                    {
+                        _io.Breach = null;
+                    }
+
+                    tick();
+                };
+            }
         }
         else
         {
@@ -1022,6 +1061,7 @@ public sealed class Vm : IDisposable
                 Start = start,
                 TickHook = instance.GetAction("tick"),
                 DoorHook = instance.GetFunction<int>("on_door_request"),
+                BreachHook = instance.GetAction("on_breach_signal"),
             };
         }
         catch
@@ -1079,6 +1119,12 @@ public sealed class Vm : IDisposable
 
         /// <summary>Its <c>on_door_request</c> hook, if it has one.</summary>
         public required Func<int>? DoorHook;
+
+        /// <summary>Its <c>on_breach_signal</c> hook, if it has one.</summary>
+        public required Action? BreachHook;
+
+        /// <summary>Breached firewalls its <c>on_breach_signal</c> hasn't heard of yet.</summary>
+        public readonly List<(int X, int Y)> Breaches = new();
 
         public bool Started;
 

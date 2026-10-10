@@ -33,7 +33,7 @@
   <Box>
     <GuideEntityEmbed Entity="NetworkFirewall"/>
   </Box>
-  A [bold]network firewall[/bold] is a switch that guards the machines behind it: put it between a router and the rest of a network. In cyberspace its pad is shut like a locked door to any runner whose ID its reader doesn't pass. Stand at it for three seconds to breach it, and it lets you through until you jack out. ICE walks through it.
+  A [bold]network firewall[/bold] is a switch that guards the machines behind it: put it between a router and the rest of a network. In cyberspace its pad is shut like a locked door to any runner whose ID its reader doesn't pass. Stand at it for three seconds to breach it, and it lets you through until you jack out, but breaching it sets off every ICE on the network: [mono]ice_basic[/mono] comes straight for the firewall, engaging. ICE walks through it.
 
   ## Pushing files
   [mono]push FILE[/mono] copies a file from your deck onto the computer whose node you stand at, once its lock lets you (it's nobody's, your ID opens it, or you've breached it). [mono]push ADDR FILE[/mono] copies it over the network to a computer your ID opens. It lands under its own name, out of any folder.

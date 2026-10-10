@@ -82,6 +82,9 @@ public sealed partial class CyberspaceSystem
 
         args.Handled = true;
         ent.Comp.Breached.Add(machine);
+        if (node.Kind == CyberNodeKind.Firewall)
+            SignalBreach(args.Target.Value);
+
         _popup.PopupEntity(Loc.GetString("cyberspace-breached", ("node", args.Target.Value)), ent, ent);
         UseNode(ent, (args.Target.Value, node));
     }

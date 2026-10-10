@@ -288,6 +288,8 @@ public static class WireLibrary
             "Runs 30 times a second after that, until sys.exit(). Without it, the program ends once its top-level code has run."),
         ("def on_door_request(who):", "door",
             "Runs when someone tries to open the door by hand, before it opens: return True to let them in, False to keep it shut. who.name is their name, who.holding the kind of thing in their hand (\"crowbar\", \"wrench\", ...; \"\" if nothing) and who.cards the organization tags of the ID cards they carry."),
+        ("def on_breach_signal(at):", "ice",
+            "Runs when a runner breaches a firewall on the network the program's ICE guards, just before its next tick. at is the firewall's tile, as [x, y]."),
     };
 
     private static readonly Dictionary<string, WireFunction> BuiltinsByName = Builtins.ToDictionary(f => f.Name);

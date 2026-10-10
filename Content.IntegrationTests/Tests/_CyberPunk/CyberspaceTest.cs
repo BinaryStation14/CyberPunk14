@@ -858,6 +858,7 @@ public sealed class CyberspaceTest : GameTest
         var godmode = _entMan.System<SharedGodmodeSystem>();
         var interaction = _entMan.System<SharedInteractionSystem>();
         var access = _entMan.System<AccessReaderSystem>();
+        var machines = _entMan.System<WasmMachineSystem>();
 
         EntityUid router = default, firewall = default, inside = default, outside = default;
         EntityUid accessPoint = default, runner = default, deck = default;
@@ -888,6 +889,9 @@ public sealed class CyberspaceTest : GameTest
             }
 
             access.TryAddAccess((firewall, _entMan.GetComponent<AccessReaderComponent>(firewall)), "Captain");
+
+            // Its ICE passes everyone, so it only moves on the breach.
+            _entMan.EnsureComponent<AccessReaderComponent>(inside);
             (runner, deck) = Runner(minds, hands, godmode, 2, 1);
         });
 
@@ -919,6 +923,7 @@ public sealed class CyberspaceTest : GameTest
             Assert.That(cyberspace.TryJackIn(runner, deck, accessPoint, true));
             Assert.That(cyberspace.IsJackedIn(runner, out var a));
             avatar = a!.Value;
+            machines.TypeLine((inside, _entMan.GetComponent<WasmMachineComponent>(inside)), "run ice_basic &");
 
             // Up to the firewall from the router's side, at the end of the path into its pad.
             var side = new[] { new Vector2i(0, 2), new Vector2i(2, 0), new Vector2i(0, -2), new Vector2i(-2, 0) }
@@ -936,11 +941,21 @@ public sealed class CyberspaceTest : GameTest
             interaction.InteractionActivate(avatar, gate);
         });
 
-        await Pair.RunTicksSync(120);
+        await Pair.RunTicksSync(30);
+        await server.WaitAssertion(() =>
+        {
+            var ice = IceOf(inside);
+            Assert.That(ice, Is.Not.EqualTo(EntityUid.Invalid));
+            Assert.That(_entMan.GetComponent<IceComponent>(ice).Mode, Is.Not.EqualTo(IceMode.Engaging));
+        });
+
+        await Pair.RunTicksSync(90);
         await server.WaitAssertion(() =>
         {
             Assert.That(_entMan.GetComponent<CyberFirewallGateComponent>(gate).Passes, Does.Contain(avatar),
                 "breached, it lets them through");
+            Assert.That(_entMan.GetComponent<IceComponent>(IceOf(inside)).Mode, Is.EqualTo(IceMode.Engaging),
+                "and the network's ICE is on its way");
             cyberspace.JackOut(runner, "", false);
         });
 

@@ -240,6 +240,9 @@ public sealed class MachineIo
 
     public readonly List<IceOrder> IceOrders = new();
 
+    /// <summary>The tile of the breached firewall, while <c>on_breach_signal</c> runs.</summary>
+    public (int X, int Y)? Breach;
+
     /// <summary>Every hostname the routers know on the machine's network, and its address.</summary>
     public IReadOnlyDictionary<string, uint> Hosts = new Dictionary<string, uint>();
 

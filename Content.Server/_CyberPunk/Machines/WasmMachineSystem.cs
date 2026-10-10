@@ -213,6 +213,15 @@ public sealed partial class WasmMachineSystem : EntitySystem
     }
 
     /// <summary>
+    /// Tells a program on a machine, by its pid, that a firewall was breached at a tile.
+    /// </summary>
+    public void SignalBreach(Entity<WasmMachineComponent?> ent, uint pid, (int X, int Y) at)
+    {
+        if (Resolve(ent, ref ent.Comp, false))
+            ent.Comp.Vm?.SignalBreach(pid, at);
+    }
+
+    /// <summary>
     /// Ends a program on a machine, by its pid, saying why on its terminal.
     /// </summary>
     public void Halt(Entity<WasmMachineComponent?> ent, uint pid, string why)

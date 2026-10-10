@@ -124,6 +124,21 @@ public sealed partial class CyberspaceSystem
         }
     }
 
+    /// <summary>
+    /// Tells the program of every ICE on a firewall's network that it was breached, and where.
+    /// </summary>
+    private void SignalBreach(EntityUid firewallNode)
+    {
+        var pos = _transform.GetWorldPosition(firewallNode);
+        var at = ((int) MathF.Floor(pos.X), (int) MathF.Floor(pos.Y));
+        var query = EntityQueryEnumerator<IceComponent>();
+        while (query.MoveNext(out _, out var ice))
+        {
+            if (AreaOf(ice.Computer) is { } area && area.Nodes.Contains(firewallNode))
+                _machines.SignalBreach(ice.Computer, ice.Pid, at);
+        }
+    }
+
     private void OnIceOrders(Entity<WasmMachineComponent> ent, ref IceOrdersEvent args)
     {
         var mine = new Dictionary<uint, Entity<IceComponent>>();

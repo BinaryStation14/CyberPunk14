@@ -269,6 +269,8 @@ public static class Kernel
             "Copies the tile the ICE stands on into buf: x then y, little-endian i32s. Returns 8."),
         new("ice_alert", "(param $buf i32 $cap i32) (result i32)", KernelScope.IceProgram, 4,
             "Where a completed trace says an intruder is: copies that tile into buf (x then y, little-endian i32s) and returns 8, or returns 0 if no alert came this tick. A trace runs on any runner who steps up to one of the network's computers without the organization's ID card; when it completes, every ICE on the network is alerted, once."),
+        new("ice_breach", "(param $buf i32 $cap i32) (result i32)", KernelScope.IceProgram, 4,
+            "During on_breach_signal: copies the tile of the firewall that was breached into buf (x then y, little-endian i32s) and returns 8; -1 outside the hook."),
         new("ice_go_to", "(param $x i32 $y i32) (result i32)", KernelScope.IceProgram, 4,
             "Walks to a tile of its network along the paths, the shortest way; it stops if there is no way there. 0 ok."),
         new("ice_mode", "(param $mode i32) (result i32)", KernelScope.IceProgram, 4,
@@ -310,6 +312,8 @@ public static class Kernel
             "Runs 30 times a second after start, until the program calls exit. Without it the program ends when start returns."),
         new("on_door_request", "(func (export \"on_door_request\") (result i32))", KernelScope.DoorController,
             "Runs when someone tries to open the door by hand, before it opens: return 1 to let them in, 0 to keep it shut. request_name, request_holding and request_cards say who they are. While a program has this hook, every hand on the door asks it first."),
+        new("on_breach_signal", "(func (export \"on_breach_signal\"))", KernelScope.IceProgram,
+            "Runs when a runner breaches a firewall on the network the program's ICE guards, just before its next tick; ice_breach says where."),
     };
 
     private static readonly Dictionary<string, KernelFunction> ByName = Functions.ToDictionary(f => f.Name);

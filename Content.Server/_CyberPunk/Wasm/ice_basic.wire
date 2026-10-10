@@ -7,7 +7,9 @@
 # and it engages: chases them through the network and strikes them when it
 # can. Out of sight for eight seconds, it goes back to searching where it
 # last saw them, and after twelve seconds with nobody found, to patrolling. A
-# completed trace sends it searching where the trace says the intruder is.
+# completed trace sends it searching where the trace says the intruder is. A
+# breached firewall sends it there at once, engaging: it strikes and chases
+# whoever it finds when it arrives, and searches if it finds nobody.
 #
 # It is a Wire program like any other: `new myice ice_basic` copies it to
 # change.
@@ -19,6 +21,7 @@ LEG = 3000           # longest walk to one spot while searching
 RADIUS = 4           # how far from where it last saw them it searches, in tiles
 PAUSE = 800          # pause at each node on patrol
 PATROL_LEG = 12000   # longest walk to one node on patrol, before it gives up
+RUSH = 30000         # longest run to a breached firewall, before it searches
 
 state = "patrolling"
 target = None        # the intruder it is after
@@ -58,13 +61,15 @@ def go(spot):
     goal = spot
     ice.go_to(spot[0], spot[1])
 
+def arrived():
+    at = ice.position()
+    return abs(at[0] - goal[0]) <= 1 and abs(at[1] - goal[1]) <= 1
+
 def search(now):
     if goal == None:
         go(last_known)
         return
-    at = ice.position()
-    near = abs(at[0] - goal[0]) <= 1 and abs(at[1] - goal[1]) <= 1
-    if near or now - leg_start > LEG:
+    if arrived() or now - leg_start > LEG:
         leg_start = now
         dx = sys.random(2 * RADIUS + 1) - RADIUS
         dy = sys.random(2 * RADIUS + 1) - RADIUS
@@ -92,6 +97,15 @@ def patrol(now):
         return
     patrol_node = options[sys.random(len(options))]
     ice.go(patrol_node)
+
+# HOOK on_breach_signal: runs when a runner breaches one of this network's
+# firewalls, with the firewall's tile as [x, y].
+def on_breach_signal(at):
+    enter("engaging")
+    target = None
+    last_known = at
+    last_seen = sys.clock()
+    go(at)
 
 def tick():
     if not started:
@@ -157,6 +171,8 @@ def tick():
             if pick.in_reach:
                 ice.attack(pick.id)
             ice.chase(pick.id)
+        elif target == None and goal != None and not arrived() and now - leg_start < RUSH:
+            last_seen = now     # still on its way to a breach
         elif now - last_seen > LOST:
             enter("searching")
             last_seen = now

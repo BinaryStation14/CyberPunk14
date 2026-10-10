@@ -974,6 +974,8 @@ internal sealed class KernelApi
             ? view.Alert is { } alert ? WriteTile(c, buf, cap, alert) : 0
             : -1);
 
+        Def("ice_breach", (c, buf, cap) => Io(c).Breach is { } at ? WriteTile(c, buf, cap, at) : -1);
+
         Def("ice_go_to", (c, x, y) => IceOf(c) != null ? IceOrder(c, IceOrderKind.GoTo, x, y) : -1);
 
         Def("ice_mode", (c, mode) =>
