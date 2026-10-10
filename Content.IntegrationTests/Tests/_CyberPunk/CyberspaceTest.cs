@@ -5,6 +5,9 @@ using System.Numerics;
 using Content.IntegrationTests.Fixtures;
 using Content.Server._CyberPunk.Cyberspace;
 using Content.Server._CyberPunk.Machines;
+using Content.Shared.Damage.Systems;
+using Content.Shared.Hands.EntitySystems;
+using Content.Shared.Mind;
 using Content.Shared.Power.EntitySystems;
 using Robust.Shared.GameObjects;
 using Robust.Shared.Map;
@@ -141,6 +144,137 @@ public sealed class CyberspaceTest : GameTest
             Assert.That(cyberspace.NodeOf(router), Is.Null);
             Assert.That(cyberspace.NodeOf(a), Is.Null);
         });
+    }
+
+    /// <summary>
+    /// A cyberdeck jacks its holder in at an access point: their mind goes into a virtual body on a spur beside
+    /// the access point's pad, which joins the network as a deck at .200 up. Jacking out by choice costs
+    /// nothing; losing the deck throws them out with dumpshock. In the hand, the deck raises a practice grid.
+    /// </summary>
+    [Test]
+    public async Task DecksJackRunnersIn()
+    {
+        var server = Pair.Server;
+        _entMan = server.ResolveDependency<IEntityManager>();
+        var machines = _entMan.System<WasmMachineSystem>();
+        var cyberspace = _entMan.System<CyberspaceSystem>();
+        var mapSys = _entMan.System<SharedMapSystem>();
+        var power = _entMan.System<SharedPowerReceiverSystem>();
+        var minds = _entMan.System<SharedMindSystem>();
+        var hands = _entMan.System<SharedHandsSystem>();
+        var godmode = _entMan.System<SharedGodmodeSystem>();
+
+        EntityUid computer = default, accessPoint = default, runner = default, deck = default, other = default, otherDeck = default;
+        await server.WaitAssertion(() =>
+        {
+            mapSys.CreateMap(out var mapId);
+            _grid = mapSys.CreateGridEntity(mapId);
+            for (var x = 0; x < 6; x++)
+            {
+                for (var y = 0; y < 3; y++)
+                {
+                    mapSys.SetTile(_grid, new Vector2i(x, y), new Tile(1));
+                }
+
+                Place("CableData", x, 0);
+            }
+
+            computer = Place("ComputerProgrammable", 0, 0);
+            accessPoint = Place("AccessPoint", 3, 0);
+            var router = Place("NetworkRouter", 1, 1);
+            foreach (var ent in new[] { computer, accessPoint, router })
+            {
+                power.SetNeedsPower(ent, false);
+            }
+
+            (runner, deck) = Runner(minds, hands, godmode, 3, 1);
+            (other, otherDeck) = Runner(minds, hands, godmode, 5, 2);
+        });
+
+        await server.WaitRunTicks(30);
+
+        EntityUid avatar = default;
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(cyberspace.NodeOf(accessPoint), Is.Not.Null, "the access point has a pad");
+            Assert.That(cyberspace.TryJackIn(runner, deck, accessPoint, true));
+            Assert.That(cyberspace.IsJackedIn(runner, out var a));
+            avatar = a!.Value;
+
+            var mind = minds.GetMind(runner)!.Value;
+            Assert.That(_entMan.GetComponent<MindComponent>(mind).VisitingEntity, Is.EqualTo(avatar));
+            Assert.That(_entMan.GetComponent<TransformComponent>(avatar).MapUid, Is.EqualTo(cyberspace.MapUid));
+
+            // The runner stands on their deck's own pad, on a spur off the access point's.
+            var at = Tile(avatar);
+            Assert.That(cyberspace.FloorAt(at.X, at.Y), Is.EqualTo(CyberFloor.Node));
+            Assert.That(Reaches(cyberspace, at, Tile(cyberspace.NodeOf(accessPoint)!.Value)));
+            Assert.That(at, Is.Not.EqualTo(Tile(cyberspace.NodeOf(accessPoint)!.Value)));
+        });
+
+        await server.WaitRunTicks(10);
+        await server.WaitAssertion(() =>
+        {
+            var address = machines.AddressOf(avatar);
+            Assert.That(address, Is.Not.Null, "the deck is on the network");
+            Assert.That(address!.Value & 0xFF, Is.EqualTo(200));
+            Assert.That(address.Value & 0xFFFFFF00, Is.EqualTo(machines.AddressOf(computer)!.Value & 0xFFFFFF00));
+            Assert.That(Name(cyberspace.NodeOf(avatar)!.Value), Does.StartWith("deck 10."));
+
+            // Jacking out by choice: no dumpshock, and the deck leaves the network.
+            cyberspace.JackOut(runner, "", false);
+            Assert.That(cyberspace.IsJackedIn(runner, out _), Is.False);
+            Assert.That(_entMan.GetComponent<MindComponent>(minds.GetMind(runner)!.Value).VisitingEntity, Is.Null);
+            Assert.That(cyberspace.NodeOf(avatar), Is.Null);
+
+            // Back in, then the deck leaves their hands.
+            Assert.That(cyberspace.TryJackIn(runner, deck, accessPoint, true));
+            Assert.That(cyberspace.IsJackedIn(runner, out var again) && again == avatar, "the same virtual body");
+            hands.TryDrop(runner, deck, checkActionBlocker: false);
+        });
+
+        await server.WaitRunTicks(5);
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(cyberspace.IsJackedIn(runner, out _), Is.False, "losing the deck throws them out");
+            hands.TryPickupAnyHand(runner, deck, checkActionBlocker: false);
+            Assert.That(cyberspace.TryJackIn(runner, deck, accessPoint, true), Is.False, "dumpshock");
+
+            // Practice, from the deck in the hand.
+            Assert.That(cyberspace.TryPractise(other, otherDeck));
+            Assert.That(cyberspace.IsJackedIn(other, out var practising));
+            var at = Tile(practising!.Value);
+            Assert.That(cyberspace.FloorAt(at.X, at.Y), Is.EqualTo(CyberFloor.Node));
+            Assert.That(Reaches(cyberspace, at, Tile(cyberspace.NodeOf(accessPoint)!.Value)), Is.False, "practice is cut off");
+        });
+
+        await server.WaitRunTicks(10);
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(cyberspace.IsJackedIn(other, out var practising));
+            var trainingServer = cyberspace.PracticeServer(0);
+            Assert.That(trainingServer, Is.Not.Null);
+            Assert.That(machines.AddressOf(trainingServer!.Value), Is.EqualTo(WasmMachineSystem.PracticeAddress(0, 2)));
+            Assert.That(machines.AddressOf(practising!.Value), Is.EqualTo(WasmMachineSystem.PracticeAddress(0, 3)));
+
+            cyberspace.JackOut(other, "", false);
+            Assert.That(cyberspace.PracticeServer(0), Is.Null, "the grid comes down");
+        });
+    }
+
+    /// <summary>
+    /// Someone with a mind, who can't be hurt, holding a cyberdeck.
+    /// </summary>
+    private (EntityUid, EntityUid) Runner(SharedMindSystem minds, SharedHandsSystem hands, SharedGodmodeSystem godmode,
+        int x, int y)
+    {
+        var mob = Place("MobHuman", x, y);
+        godmode.EnableGodmode(mob);
+        var mind = minds.CreateMind(null);
+        minds.TransferTo(mind, mob, mind: mind);
+        var deck = Place("Cyberdeck", x, y);
+        Assert.That(hands.TryPickupAnyHand(mob, deck, checkActionBlocker: false));
+        return (mob, deck);
     }
 
     private EntityUid Place(string prototype, int x, int y)

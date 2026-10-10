@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Linq;
 using System.Reflection;
+using Content.Server._CyberPunk.Cyberspace;
 using Content.Server._CyberPunk.Network;
 using Content.Server._CyberPunk.Wasm;
 using Content.Shared.Access.Components;
@@ -51,16 +52,19 @@ public sealed partial class WasmMachineSystem
 
     private void OnAnyAnchorChanged(ref AnchorStateChangedEvent args)
     {
-        if (HasComp<ActivatableUIComponent>(args.Entity))
+        if (HasComp<ActivatableUIComponent>(args.Entity) || HasComp<AccessPointComponent>(args.Entity))
             _networkDirty = true;
     }
 
     /// <summary>
-    /// Whether a machine joins the network as a device: it has a UI of its own that anyone can open, and it
-    /// isn't a computer, which joins the network itself.
+    /// Whether a machine joins the network as a device: it's an access point, or it has a UI of its own that
+    /// anyone can open, and it isn't a computer, which joins the network itself.
     /// </summary>
     public bool IsDevice(EntityUid uid)
     {
+        if (HasComp<AccessPointComponent>(uid))
+            return true;
+
         return TryComp<ActivatableUIComponent>(uid, out var aui)
                && !aui.AdminOnly
                && !aui.InHandsOnly

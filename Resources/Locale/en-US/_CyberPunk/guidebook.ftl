@@ -5,3 +5,4 @@ guide-entry-program-uis = Program UIs
 guide-entry-computer-networks = Computer Networks
 guide-entry-custom-operating-systems = Custom Operating Systems
 guide-entry-computer-assembly = Assembly and the Kernel
+guide-entry-cyberspace = Cyberspace

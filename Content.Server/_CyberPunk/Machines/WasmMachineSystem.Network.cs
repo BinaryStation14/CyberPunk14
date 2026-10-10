@@ -38,6 +38,9 @@ public sealed partial class WasmMachineSystem
 
     private readonly List<Packet> _sent = new();
 
+    /// <summary>Machines with no cable of their own on a network, like decks, and where they join.</summary>
+    private readonly Dictionary<EntityUid, VirtualHost> _virtualHosts = new();
+
     private void InitializeNetwork()
     {
         SubscribeLocalEvent<WasmMachineComponent, NodeGroupsRebuilt>(OnMachineNodesRebuilt);
@@ -57,6 +60,27 @@ public sealed partial class WasmMachineSystem
     public void RefreshNetwork()
     {
         _networkDirty = true;
+    }
+
+    /// <summary>
+    /// Puts a machine with no cable on a network, like a runner's deck, or takes it off with null.
+    /// </summary>
+    public void SetVirtualHost(EntityUid machine, VirtualHost? host)
+    {
+        if (host is { } h)
+            _virtualHosts[machine] = h;
+        else
+            _virtualHosts.Remove(machine);
+
+        _networkDirty = true;
+    }
+
+    /// <summary>
+    /// The address of a host on a practice network: 10.250.(lan + 1).host.
+    /// </summary>
+    public static uint PracticeAddress(int lan, byte host)
+    {
+        return 10u << 24 | 250u << 16 | (uint) (lan + 1) << 8 | host;
     }
 
     private void OnMachineNodesRebuilt(Entity<WasmMachineComponent> ent, ref NodeGroupsRebuilt args)
@@ -224,7 +248,7 @@ public sealed partial class WasmMachineSystem
         var machines = EntityQueryEnumerator<WasmMachineComponent>();
         while (machines.MoveNext(out var uid, out var machine))
         {
-            if (machine.Vm == null)
+            if (machine.Vm == null || _virtualHosts.ContainsKey(uid))
                 continue;
 
             if (NetworkOf(uid, machine.DataNode) is { } network && served.ContainsKey(network))
@@ -241,6 +265,18 @@ public sealed partial class WasmMachineSystem
         }
 
         FindDevices(served, members);
+
+        // Decks join the network of the machine they came in through.
+        foreach (var (machine, virtualHost) in _virtualHosts)
+        {
+            if (virtualHost.Beside is not { } device || !TryComp<WasmMachineComponent>(machine, out var comp) || comp.Vm == null)
+                continue;
+
+            if (members.FirstOrDefault(m => m.Value.Contains(device)).Value is { } list)
+                list.Add(machine);
+            else
+                unconnected.Add((machine, comp));
+        }
 
         // Addresses: a machine keeps the one it has while it stays, and a newcomer gets the lowest free one.
         var lans = new List<(MapId Map, List<(uint Address, EntityUid Machine)> Hosts)>();
@@ -263,7 +299,8 @@ public sealed partial class WasmMachineSystem
             {
                 if (!leases.TryGetValue(machine, out var host))
                 {
-                    host = 2;
+                    // Decks take the top of the range, .200 up.
+                    host = (byte) (_virtualHosts.ContainsKey(machine) ? 200 : 2);
                     while (host < 255 && used.Contains(host))
                     {
                         host++;
@@ -283,6 +320,25 @@ public sealed partial class WasmMachineSystem
                 }
 
                 var address = SubnetBase(router.Comp.Subnet) | host;
+                _addresses[address] = (machine, map);
+                hosts.Add((address, machine));
+            }
+
+            lans.Add((map, hosts));
+        }
+
+        // Practice networks: each its own network, reaching nothing else, on a map of its own that no real map
+        // shares.
+        foreach (var group in _virtualHosts.Where(v => v.Value.Beside == null).GroupBy(v => v.Value.Lan))
+        {
+            var map = new MapId(-1 - group.Key);
+            var hosts = new List<(uint, EntityUid)>();
+            foreach (var (machine, virtualHost) in group.OrderBy(v => v.Value.Host))
+            {
+                if (CompOrNull<WasmMachineComponent>(machine)?.Vm == null)
+                    continue;
+
+                var address = PracticeAddress(group.Key, virtualHost.Host);
                 _addresses[address] = (machine, map);
                 hosts.Add((address, machine));
             }
@@ -351,6 +407,10 @@ public sealed partial class WasmMachineSystem
 
             foreach (var machine in list)
             {
+                // Decks have nodes of their own beside the machine they came in through, not pads.
+                if (_virtualHosts.ContainsKey(machine))
+                    continue;
+
                 if (addressOf.TryGetValue(machine, out var address))
                     net.Hosts.Add((machine, address));
             }
@@ -478,3 +538,9 @@ public sealed class MachineNetwork(EntityUid router)
 /// </summary>
 [ByRefEvent]
 public readonly record struct MachineNetworksRebuiltEvent(List<MachineNetwork> Networks);
+
+/// <summary>
+/// Where a machine with no cable joins a network: the network of the machine it's beside, or, with none, a
+/// practice network of its own, at a fixed host number.
+/// </summary>
+public readonly record struct VirtualHost(EntityUid? Beside, int Lan = 0, byte Host = 0);

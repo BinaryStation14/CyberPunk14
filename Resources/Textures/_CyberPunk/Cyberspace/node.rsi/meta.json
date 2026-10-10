@@ -17,7 +17,13 @@
             "name": "diamond"
         },
         {
+            "name": "runner"
+        },
+        {
             "name": "square"
+        },
+        {
+            "name": "triangle"
         }
     ]
 }

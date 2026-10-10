@@ -15,6 +15,12 @@ public enum CyberNodeKind : byte
 
     /// <summary>A machine with a UI of its own on the network, like a vending machine.</summary>
     Device,
+
+    /// <summary>A network port in a wall, a way into cyberspace.</summary>
+    AccessPoint,
+
+    /// <summary>A runner's deck, on a spur beside the machine it came in through.</summary>
+    Deck,
 }
 
 /// <summary>
@@ -27,7 +33,8 @@ public sealed partial class CyberNodeComponent : Component
     public CyberNodeKind Kind;
 
     /// <summary>
-    /// The machine it stands for; none for the backbone.
+    /// The machine it stands for (a deck's is the runner's virtual body); none for the backbone and the parts of
+    /// a practice grid that are only there to look at.
     /// </summary>
     [ViewVariables]
     public EntityUid? Machine;
