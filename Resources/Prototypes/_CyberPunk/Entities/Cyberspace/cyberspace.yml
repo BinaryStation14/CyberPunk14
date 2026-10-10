@@ -229,6 +229,9 @@
     size: Small
     heldPrefix: default
   - type: Unremoveable
+  - type: IdCard
+    nameLocId: cyberspace-proxy-id-name
+    fullNameLocId: cyberspace-proxy-id-full-name
   - type: CyberProxyId
 
 # The computer of a practice grid, on nobody's network but the grid's.

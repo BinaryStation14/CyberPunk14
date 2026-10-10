@@ -2,6 +2,7 @@ using System.Numerics;
 using Content.Server.Cloning;
 using Content.Shared._CyberPunk.Cyberspace;
 using Content.Shared.Access.Components;
+using Content.Shared.Access.Systems;
 using Content.Shared.Body;
 using Content.Shared.Cloning;
 using Content.Shared.Examine;
@@ -11,6 +12,7 @@ using Content.Shared.Inventory;
 using Content.Shared.Preferences;
 using Content.Shared.Roles;
 using Content.Shared.Station.Systems;
+using Content.Shared.StatusIcon;
 using Robust.Shared.Containers;
 using Robust.Shared.Prototypes;
 
@@ -28,6 +30,7 @@ public sealed partial class CyberspaceSystem
     [Dependency] private HumanoidProfileSystem _humanoid = default!;
     [Dependency] private InventorySystem _inventory = default!;
     [Dependency] private OrganRelationSystem _organs = default!;
+    [Dependency] private SharedIdCardSystem _idCard = default!;
     [Dependency] private StationSpawningSystem _spawning = default!;
     [Dependency] private SharedContainerSystem _container = default!;
     [Dependency] private SharedVisualBodySystem _visualBody = default!;
@@ -35,6 +38,7 @@ public sealed partial class CyberspaceSystem
     private static readonly ProtoId<SpeciesPrototype> AvatarSpecies = "CyberAvatar";
     private static readonly ProtoId<CloningSettingsPrototype> AvatarCloning = "CyberAvatar";
     private static readonly ProtoId<StartingGearPrototype> AvatarGear = "CyberAvatar";
+    private static readonly ProtoId<JobIconPrototype> NoIdIcon = "JobIconNoId";
 
     private void InitializeAvatars()
     {
@@ -79,6 +83,33 @@ public sealed partial class CyberspaceSystem
         args.PushMarkup(ReflectedId(ent) is { } id
             ? Loc.GetString("cyberspace-proxy-id-reflects", ("id", id))
             : Loc.GetString("cyberspace-proxy-id-blank"));
+    }
+
+    /// <summary>
+    /// Keeps the proxy IDs of the runners jacked in showing the name and job on the IDs their bodies wear, so
+    /// clients, which can't see those IDs, read them off the proxy.
+    /// </summary>
+    private void MirrorIds()
+    {
+        var query = EntityQueryEnumerator<NetrunnerComponent>();
+        while (query.MoveNext(out var body, out var runner))
+        {
+            if (runner.JackedIn == null
+                || runner.Avatar is not { } avatar
+                || !_inventory.TryGetSlotEntity(avatar, "id", out var proxy)
+                || !TryComp<IdCardComponent>(proxy, out var proxyCard))
+            {
+                continue;
+            }
+
+            IdCardComponent? real = null;
+            if (_inventory.TryGetSlotEntity(body, "id", out var worn) && _idCard.TryGetIdCard(worn.Value, out var card))
+                real = card.Comp;
+
+            _idCard.TryChangeFullName(proxy.Value, real?.FullName, proxyCard);
+            _idCard.TryChangeJobTitle(proxy.Value, real?.LocalizedJobTitle, proxyCard);
+            _idCard.TryChangeJobIcon(proxy.Value, ProtoMan.Index(real?.JobIcon ?? NoIdIcon), proxyCard);
+        }
     }
 
     /// <summary>
