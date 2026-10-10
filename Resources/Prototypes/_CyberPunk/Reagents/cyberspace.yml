@@ -1,0 +1,12 @@
+- type: reagent
+  id: Ghostlight
+  name: reagent-name-ghostlight
+  group: Biological
+  desc: reagent-desc-ghostlight
+  flavor: electrons
+  color: "#4DD9FF"
+  recognizable: true
+  standsout: true
+  physicalDesc: reagent-physical-desc-glowing
+  tileReactions:
+  - !type:SpillTileReaction

@@ -266,6 +266,7 @@ public sealed partial class CyberspaceSystem
         // Made on cyberspace's map so it boots like any machine, then kept out of the way until it's walked.
         var avatar = Spawn(AvatarPrototype, new EntityCoordinates(_mapUid!.Value, 0.5f, 0.5f));
         _meta.SetEntityName(avatar, Name(runner));
+        TakeShape(avatar, runner);
         var comp = EnsureComp<CyberAvatarComponent>(avatar);
         comp.Body = runner;
         _actions.AddAction(avatar, ref comp.JackOutAction, JackOutAction);

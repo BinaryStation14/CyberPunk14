@@ -106,17 +106,31 @@
     color: "#FFF24D"
 
 # A runner's virtual body: their mind walks it while their real body stays behind. It's a computer, their deck.
+# It takes the shape of their body, without the insides: it doesn't breathe, eat or feel the cold, and it bleeds
+# ghostlight.
 - type: entity
-  parent: BaseMob
+  parent: [ BaseSpeciesMob, MobBloodstream ]
   id: CyberAvatar
   name: runner
   description: Someone's mind, walking the network.
   categories: [ HideSpawnMenu ]
   components:
-  - type: Sprite
-    sprite: _CyberPunk/Cyberspace/node.rsi
-    state: runner
-    color: "#4DD9FF"
+  - type: HumanoidProfile
+    species: CyberAvatar
+  - type: InitialBody
+    organs: {}
+  - type: Bloodstream
+    bloodReferenceSolution:
+      reagents:
+      - ReagentId: Ghostlight
+        Quantity: 600
+  - type: DamageVisuals
+    damageOverlayGroups:
+      Brute:
+        sprite: Mobs/Effects/brute_damage.rsi
+        color: "#4DD9FF"
+      Burn:
+        sprite: Mobs/Effects/burn_damage.rsi
   - type: CyberAvatar
   - type: DoAfter
   - type: WasmMachine
@@ -141,6 +155,34 @@
     interfaces:
       enum.MachineTerminalUiKey.Key:
         type: MachineTerminalBoundUserInterface
+      enum.HumanoidMarkingModifierKey.Key:
+        type: HumanoidMarkingModifierBoundUserInterface
+      enum.StrippingUiKey.Key:
+        type: StrippableBoundUserInterface
+
+# What a runner's virtual body takes from them, besides the look of their body. It wears copies of their clothes,
+# but nothing that could work as a weapon or a radio, and none of what they carry.
+- type: cloningSettings
+  id: CyberAvatar
+  copyEquipment: [ head, eyes, mask, neck, innerclothing, outerclothing, gloves, feet, back ]
+  copyInternalStorage: false
+  copyImplants: false
+  copyStatusEffects: false
+  equipmentBlacklist:
+    components:
+    - AttachedClothing
+    - Gun
+    - Implanter
+    - VirtualItem
+  components:
+  - DetailExaminable
+  - ScaleVisuals
+  - Speech
+  - TypingIndicator
+  eventComponents:
+  - Hands
+  - Inventory
+  - EyeBlinking
 
 # The computer of a practice grid, on nobody's network but the grid's.
 - type: entity
