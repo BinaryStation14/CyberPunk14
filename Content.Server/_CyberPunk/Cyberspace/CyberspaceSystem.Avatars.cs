@@ -18,9 +18,9 @@ namespace Content.Server._CyberPunk.Cyberspace;
 
 /// <summary>
 /// A runner's virtual body takes their shape: the outside of their species' body, coloured and marked like
-/// theirs, and their voice. It wears a runner's uniform and a proxy of whatever ID their real body wears, and
-/// shows in a colour of their own. Its species is its own, so it doesn't breathe, eat or feel the cold, and it
-/// bleeds ghostlight.
+/// theirs, and their voice. It wears a runner's uniform, a skirt if they're female, and a proxy of whatever ID
+/// their real body wears, and shows in a colour of their own. Its species is its own, so it doesn't breathe, eat
+/// or feel the cold, and it bleeds ghostlight.
 /// </summary>
 public sealed partial class CyberspaceSystem
 {
@@ -35,6 +35,7 @@ public sealed partial class CyberspaceSystem
     private static readonly ProtoId<SpeciesPrototype> AvatarSpecies = "CyberAvatar";
     private static readonly ProtoId<CloningSettingsPrototype> AvatarCloning = "CyberAvatar";
     private static readonly ProtoId<StartingGearPrototype> AvatarGear = "CyberAvatar";
+    private static readonly ProtoId<StartingGearPrototype> AvatarSkirtGear = "CyberAvatarSkirt";
 
     private void InitializeAvatars()
     {
@@ -60,7 +61,7 @@ public sealed partial class CyberspaceSystem
         }
 
         _cloning.CloneComponents(body, avatar, ProtoMan.Index(AvatarCloning));
-        _spawning.EquipStartingGear(avatar, AvatarGear);
+        _spawning.EquipStartingGear(avatar, profile?.Sex == Sex.Female ? AvatarSkirtGear : AvatarGear);
 
         body.Comp.Tint ??= Color.FromHsv(new Vector4(_random.NextFloat(), 0.75f, 1f, 1f));
         var look = EnsureComp<CyberAvatarLookComponent>(avatar);
