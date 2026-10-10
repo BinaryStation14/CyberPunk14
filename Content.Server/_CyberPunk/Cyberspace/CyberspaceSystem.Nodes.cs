@@ -45,6 +45,14 @@ public sealed partial class CyberspaceSystem
 
     private readonly Dictionary<(EntityUid Machine, Enum Key), RemoteUi> _remoteUis = new();
 
+    /// <summary>
+    /// How long a machine stays sent to a runner's client after its UI closes, so the client hears that it closed
+    /// before the machine leaves its view.
+    /// </summary>
+    private static readonly TimeSpan PvsLinger = TimeSpan.FromSeconds(1);
+
+    private readonly List<(EntityUid Machine, ICommonSession Session, TimeSpan Until)> _lingering = new();
+
     private void InitializeNodes()
     {
         SubscribeLocalEvent<CyberNodeComponent, ActivateInWorldEvent>(OnNodeActivate);
@@ -185,6 +193,8 @@ public sealed partial class CyberspaceSystem
     /// </summary>
     private void TendRemoteUis()
     {
+        ReleaseLingering();
+
         foreach (var ((machine, key), remote) in new List<KeyValuePair<(EntityUid, Enum), RemoteUi>>(_remoteUis))
         {
             if (TerminatingOrDeleted(machine))
@@ -203,7 +213,7 @@ public sealed partial class CyberspaceSystem
                     _ui.CloseUi(machine, key, avatar);
 
                 if (session != null)
-                    _pvsOverride.RemoveSessionOverride(machine, session);
+                    _lingering.Add((machine, session, _timing.CurTime + PvsLinger));
 
                 remote.Runners.Remove(avatar);
             }
@@ -229,6 +239,43 @@ public sealed partial class CyberspaceSystem
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Stops sending machines to the clients of runners whose UIs closed a while ago, unless they've opened them
+    /// again since.
+    /// </summary>
+    private void ReleaseLingering()
+    {
+        for (var i = _lingering.Count - 1; i >= 0; i--)
+        {
+            var (machine, session, until) = _lingering[i];
+            if (_timing.CurTime < until)
+                continue;
+
+            _lingering.RemoveAt(i);
+            if (TerminatingOrDeleted(machine) || Reopened(machine, session))
+                continue;
+
+            _pvsOverride.RemoveSessionOverride(machine, session);
+        }
+    }
+
+    private bool Reopened(EntityUid machine, ICommonSession session)
+    {
+        foreach (var ((uid, _), remote) in _remoteUis)
+        {
+            if (uid != machine)
+                continue;
+
+            foreach (var (_, (_, other)) in remote.Runners)
+            {
+                if (other == session)
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
