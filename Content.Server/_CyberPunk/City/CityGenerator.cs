@@ -11,13 +11,17 @@ namespace Content.Server._CyberPunk.City;
 /// The map is a square grid of districts with an avenue between every two of them and round the outside. First
 /// a Wave Function Collapse pass picks each district's <see cref="CityZone"/>. Which zones may sit side by side is
 /// fixed (no corporate towers next to the badlands), and each district is narrowed beforehand by where it lies:
-/// a coastline wanders along one side of the map with the sea beyond it, and the city grows out from a centre
-/// near the shore, densest in the middle and thinning to badlands at the edge.
+/// a coastline wanders along one side of the map with the sea beyond it, and the city grows out in rings from a
+/// corporate core near the shore, thinning to badlands at the edge. Along the coast, one side of the core is rich
+/// and the other industrial. A quota pass then makes sure every zone has its share of districts, and the city's
+/// one solar plant is placed out in the badlands.
 /// </para>
 /// <para>
 /// Then the ground is painted. The sea and the beaches follow a smoothed, noisy blend of the districts, so the
 /// shore doesn't follow district edges. Built-up districts are filled with streets and buildings by
-/// <see cref="CityBlockGenerator"/>, styled per zone. Avenues are streets wherever they touch the city, and two
+/// <see cref="CityBlockGenerator"/>, styled per zone, except where a landmark stands: the corporate headquarters,
+/// the civic centre, a megabuilding, the parks and the solar plant. Sparse townships line a few roads out in the
+/// badlands. Avenues are streets wherever they touch the city, and two
 /// highways carry on through the badlands.
 /// </para>
 /// <para>
@@ -25,8 +29,12 @@ namespace Content.Server._CyberPunk.City;
 /// runs round the city a little way in from the edge, with a checkpoint wherever a highway crosses it, and an
 /// indestructible wall closes off the edge itself.
 /// </para>
+/// <para>
+/// Last, the city is wired from the solar plant: high-voltage cable under the sidewalks to a substation by every
+/// block, medium-voltage cable on to an APC in every building, and low-voltage cable round its rooms.
+/// </para>
 /// </remarks>
-public static class CityGenerator
+public static partial class CityGenerator
 {
     public const int DistrictCells = 8;
     public const int DistrictSize = DistrictCells * CityBlockGenerator.Cell + 1;
@@ -49,54 +57,76 @@ public static class CityGenerator
     /// </summary>
     public const int FenceInset = 20;
 
-    private const int Bunkers = 4;
 
-    private const int ZoneCount = (int) CityZone.Solar + 1;
+    private const int Bunkers = 6;
 
     private static readonly int[] ZoneWeights =
     {
         10, // Ocean
         6, // Coast
-        4, // Docks
-        10, // Downtown
+        10, // Corporate
         8, // Commercial
-        8, // Residential
-        5, // Industrial
-        6, // Slums
-        2, // Park
+        4, // Public
+        6, // HighClass
+        8, // MediumClass
+        8, // LowClass
+        6, // Industrial
+        4, // Shanty
         10, // Badlands
         6, // Scrub
+        1, // Township
         1, // Solar
     };
 
     /// <summary>The zones each zone may sit beside, besides itself.</summary>
     private static readonly Dictionary<CityZone, CityZone[]> Touches = new()
     {
-        [CityZone.Ocean] = new[] { CityZone.Coast, CityZone.Docks },
+        [CityZone.Ocean] = new[] { CityZone.Coast, CityZone.HighClass, CityZone.Industrial, CityZone.Shanty },
         [CityZone.Coast] = new[]
         {
-            CityZone.Docks, CityZone.Downtown, CityZone.Commercial, CityZone.Residential, CityZone.Slums,
-            CityZone.Park, CityZone.Badlands, CityZone.Scrub,
+            CityZone.Corporate, CityZone.Commercial, CityZone.Public, CityZone.HighClass, CityZone.MediumClass,
+            CityZone.LowClass, CityZone.Industrial, CityZone.Shanty, CityZone.Badlands, CityZone.Scrub,
         },
-        [CityZone.Docks] = new[] { CityZone.Downtown, CityZone.Commercial, CityZone.Industrial, CityZone.Slums },
-        [CityZone.Downtown] = new[] { CityZone.Commercial, CityZone.Residential, CityZone.Park },
-        [CityZone.Commercial] = new[] { CityZone.Residential, CityZone.Industrial, CityZone.Slums, CityZone.Park },
-        [CityZone.Residential] = new[] { CityZone.Industrial, CityZone.Slums, CityZone.Park, CityZone.Scrub },
-        [CityZone.Industrial] = new[] { CityZone.Slums, CityZone.Badlands, CityZone.Scrub, CityZone.Solar },
-        [CityZone.Slums] = new[] { CityZone.Badlands, CityZone.Scrub },
-        [CityZone.Park] = Array.Empty<CityZone>(),
-        [CityZone.Badlands] = new[] { CityZone.Scrub, CityZone.Solar },
-        [CityZone.Scrub] = new[] { CityZone.Solar },
+        [CityZone.Corporate] = new[] { CityZone.Commercial, CityZone.Public, CityZone.HighClass, CityZone.MediumClass },
+        [CityZone.Commercial] = new[]
+        {
+            CityZone.Public, CityZone.HighClass, CityZone.MediumClass, CityZone.LowClass, CityZone.Industrial, CityZone.Shanty,
+        },
+        [CityZone.Public] = new[] { CityZone.HighClass, CityZone.MediumClass },
+        [CityZone.HighClass] = new[] { CityZone.MediumClass },
+        [CityZone.MediumClass] = new[] { CityZone.LowClass, CityZone.Industrial, CityZone.Badlands, CityZone.Scrub },
+        [CityZone.LowClass] = new[] { CityZone.Industrial, CityZone.Shanty, CityZone.Badlands, CityZone.Scrub },
+        [CityZone.Industrial] = new[] { CityZone.Shanty, CityZone.Badlands, CityZone.Scrub },
+        [CityZone.Shanty] = new[] { CityZone.Badlands, CityZone.Scrub },
+        [CityZone.Badlands] = new[] { CityZone.Scrub },
+        [CityZone.Scrub] = Array.Empty<CityZone>(),
+        [CityZone.Township] = Array.Empty<CityZone>(),
         [CityZone.Solar] = Array.Empty<CityZone>(),
     };
 
-    private static readonly WfcRules ZoneRules = new(ZoneWeights, (a, _, b) => a == b
-        || Array.IndexOf(Touches[(CityZone) a], (CityZone) b) >= 0
-        || Array.IndexOf(Touches[(CityZone) b], (CityZone) a) >= 0);
+    private static bool CanTouch(CityZone a, CityZone b)
+    {
+        return a == b || Array.IndexOf(Touches[a], b) >= 0 || Array.IndexOf(Touches[b], a) >= 0;
+    }
+
+    private static readonly WfcRules ZoneRules = new(ZoneWeights, (a, _, b) => CanTouch((CityZone) a, (CityZone) b));
+
+    /// <summary>How many districts of each built-up zone a city has, at least and at most.</summary>
+    private static readonly Dictionary<CityZone, (int Min, int Max)> Quotas = new()
+    {
+        [CityZone.Corporate] = (3, 4),
+        [CityZone.Public] = (2, 3),
+        [CityZone.Commercial] = (5, 7),
+        [CityZone.HighClass] = (3, 4),
+        [CityZone.MediumClass] = (5, 7),
+        [CityZone.LowClass] = (5, 7),
+        [CityZone.Industrial] = (5, 7),
+        [CityZone.Shanty] = (2, 4),
+    };
 
     private static readonly Dictionary<CityZone, BlockStyle> Styles = new()
     {
-        [CityZone.Downtown] = new BlockStyle
+        [CityZone.Corporate] = new BlockStyle
         {
             Sprawl = 250,
             Terraces = 50,
@@ -111,12 +141,42 @@ public static class CityGenerator
             Window = CityStructure.WindowTinted,
             WindowPercent = 60,
         },
-        [CityZone.Residential] = new BlockStyle
+        [CityZone.Public] = new BlockStyle
+        {
+            Roads = 40,
+            Walks = 120,
+            Sprawl = 300,
+            Terraces = 20,
+            Floors = new[] { CityFloor.White, CityFloor.Steel, CityFloor.Marble },
+            WindowPercent = 70,
+        },
+        [CityZone.HighClass] = new BlockStyle
+        {
+            Roads = 30,
+            Walks = 60,
+            Lots = 250,
+            Sprawl = 200,
+            Terraces = 20,
+            Floors = new[] { CityFloor.Wood, CityFloor.Marble, CityFloor.White },
+            WindowPercent = 70,
+        },
+        [CityZone.MediumClass] = new BlockStyle
         {
             Sprawl = 50,
             Terraces = 250,
             Floors = new[] { CityFloor.Wood, CityFloor.Steel, CityFloor.Wood },
             Wall = CityStructure.WallBrick,
+        },
+        [CityZone.LowClass] = new BlockStyle
+        {
+            Walks = 120,
+            Sprawl = 40,
+            Terraces = 300,
+            Sidewalk = CityFloor.OldConcrete,
+            Floors = new[] { CityFloor.SteelDirty, CityFloor.OldConcrete, CityFloor.Steel },
+            Wall = CityStructure.WallConcrete,
+            WindowPercent = 20,
+            DecayPercent = 2,
         },
         [CityZone.Industrial] = new BlockStyle
         {
@@ -127,17 +187,7 @@ public static class CityGenerator
             Wall = CityStructure.WallConcrete,
             WindowPercent = 15,
         },
-        [CityZone.Docks] = new BlockStyle
-        {
-            Roads = 80,
-            Sprawl = 400,
-            Terraces = 30,
-            Sidewalk = CityFloor.Concrete,
-            Floors = new[] { CityFloor.Plating, CityFloor.SteelDirty },
-            Wall = CityStructure.WallReinforced,
-            WindowPercent = 10,
-        },
-        [CityZone.Slums] = new BlockStyle
+        [CityZone.Shanty] = new BlockStyle
         {
             Walks = 150,
             Sprawl = 30,
@@ -146,13 +196,25 @@ public static class CityGenerator
             Floors = new[] { CityFloor.SteelDirty, CityFloor.Plating, CityFloor.OldConcrete },
             Wall = CityStructure.WallRust,
             WindowPercent = 25,
-            DecayPercent = 6,
+            DecayPercent = 8,
         },
+    };
+
+    /// <summary>Industrial districts on the waterfront are the port.</summary>
+    private static readonly BlockStyle Port = new()
+    {
+        Roads = 80,
+        Sprawl = 400,
+        Terraces = 30,
+        Sidewalk = CityFloor.Concrete,
+        Floors = new[] { CityFloor.Plating, CityFloor.SteelDirty },
+        Wall = CityStructure.WallReinforced,
+        WindowPercent = 10,
     };
 
     public static bool IsBuiltUp(CityZone zone)
     {
-        return zone is >= CityZone.Docks and <= CityZone.Park;
+        return zone is >= CityZone.Corporate and <= CityZone.Shanty;
     }
 
     /// <summary>The first tile of district <paramref name="d"/> along either axis.</summary>
@@ -170,9 +232,9 @@ public static class CityGenerator
     /// <summary>
     /// Every district, as blocks: (x, y) of its bottom-left district and its size in districts. Built-up districts
     /// are sometimes joined with neighbours of the same zone into one block of two or four, so the avenues don't
-    /// make a regular grid. The city centre stays on its own, so the junction at its corner is always a street.
+    /// make a regular grid. Landmark districts stay on their own.
     /// </summary>
-    private static List<(int X, int Y, int W, int H)> Blocks(CityPlan plan, Shape shape, CyberRng rng)
+    private static List<(int X, int Y, int W, int H)> Blocks(CityPlan plan, HashSet<(int, int)> lone, CyberRng rng)
     {
         var n = plan.Districts;
         var taken = new bool[n * n];
@@ -188,11 +250,11 @@ public static class CityGenerator
                 var zone = plan.Zone(x, y);
                 bool Joins(int jx, int jy)
                 {
-                    return jx < n && jy < n && !taken[jy * n + jx] && plan.Zone(jx, jy) == zone && (jx, jy) != shape.Centre;
+                    return jx < n && jy < n && !taken[jy * n + jx] && plan.Zone(jx, jy) == zone && !lone.Contains((jx, jy));
                 }
 
                 var (w, h) = (1, 1);
-                if (Styles.ContainsKey(zone) && (x, y) != shape.Centre && rng.Chance(1, 2))
+                if (Styles.ContainsKey(zone) && !lone.Contains((x, y)) && rng.Chance(1, 2))
                 {
                     rng.Shuffle(sizes);
                     foreach (var (sw, sh) in sizes)
@@ -229,60 +291,127 @@ public static class CityGenerator
         return blocks;
     }
 
-    public static CityPlan Generate(ulong seed, int districts = 8)
+    public static CityPlan Generate(ulong seed, int districts = 12)
     {
-        if (districts < 4)
-            throw new ArgumentOutOfRangeException(nameof(districts), "a city needs at least 4 districts a side");
+        if (districts < 8)
+            throw new ArgumentOutOfRangeException(nameof(districts), "a city needs at least 8 districts a side");
 
         var rng = new CyberRng(seed);
         var plan = new CityPlan(districts);
         var shape = new Shape(districts, rng.Fork(1));
         SolveZones(plan, shape, rng.Fork(2));
+        var solar = PlaceSolarPlant(plan, shape);
         ClearStrandedDistricts(plan, shape);
+        MeetQuotas(plan, shape);
+        // Trimming the city to size can leave districts cut off; those go, and the shortfall is made up again.
+        ClearStrandedDistricts(plan, shape);
+        MeetQuotas(plan, shape);
 
         var terrain = new Terrain(plan, rng.Fork(3).NextU64());
         terrain.Paint();
-        PaintAvenues(plan, shape);
+        var roads = PaintAvenues(plan, shape);
+
+        // The districts with a landmark of their own, nearest the centre first.
+        var centre = shape.Centre;
+        var civic = NearestOf(plan, centre, CityZone.Public, Array.Empty<(int, int)>());
+        var park = civic is { } c ? NearestOf(plan, centre, CityZone.Public, new[] { c }) : null;
+        var mega = NearestOf(plan, centre, CityZone.LowClass, Array.Empty<(int, int)>());
+        var lone = new HashSet<(int, int)> { centre };
+        foreach (var d in new[] { civic, park, mega })
+        {
+            if (d is { } district)
+                lone.Add(district);
+        }
 
         var districtRng = rng.Fork(4);
-        foreach (var (dx, dy, w, h) in Blocks(plan, shape, rng.Fork(5)))
+        var regions = new List<Region>();
+        foreach (var (dx, dy, w, h) in Blocks(plan, lone, rng.Fork(5)))
         {
             var zoneRng = districtRng.Fork((ulong) (dy * districts + dx));
             var (ox, oy) = (Origin(dx), Origin(dy));
             var zone = plan.Zone(dx, dy);
-            if (Styles.TryGetValue(zone, out var style))
+            if (IsBuiltUp(zone))
+                regions.Add(new Region(ox, oy, w * Pitch - Avenue, h * Pitch - Avenue, Affluent.Contains(zone)));
+            if ((dx, dy) == centre)
+                PaintHeadquarters(plan, ox, oy, zoneRng);
+            else if ((dx, dy) == civic)
+                PaintCivicCentre(plan, ox, oy, zoneRng);
+            else if ((dx, dy) == park)
+                PaintPark(plan, ox, oy, zoneRng);
+            else if ((dx, dy) == mega)
+                PaintMegabuilding(plan, ox, oy, zoneRng);
+            else if (Styles.TryGetValue(zone, out var style))
             {
-                CityBlockGenerator.Generate(plan, ox, oy, BlockCells(w), BlockCells(h), style, zoneRng);
-                continue;
-            }
+                if (zone == CityZone.Industrial && ByTheSea(plan, dx, dy, w, h))
+                    style = Port;
 
-            switch (zone)
-            {
-                case CityZone.Park:
-                    PaintPark(plan, ox, oy, zoneRng);
-                    break;
-                case CityZone.Solar:
-                    PaintSolarFarm(plan, ox, oy);
-                    break;
-                case CityZone.Badlands:
-                    if (zoneRng.Chance(1, 2))
-                        PaintRuin(plan, ox, oy, zoneRng);
-                    break;
+                CityBlockGenerator.Generate(plan, ox, oy, BlockCells(w), BlockCells(h), style, zoneRng);
+                if (zone == CityZone.HighClass)
+                    PaintLawns(plan, ox, oy, BlockCells(w) * CityBlockGenerator.Cell + 1, BlockCells(h) * CityBlockGenerator.Cell + 1);
             }
+            else if (zone == CityZone.Badlands && zoneRng.Chance(1, 2))
+                PaintRuin(plan, ox, oy, zoneRng);
         }
 
+        var bank = PaintSolarPlant(plan, solar);
+        PaintTownships(plan, roads, rng.Fork(7));
         PaintBunkers(plan, rng.Fork(6));
-        PaintBorder(plan);
+        foreach (var (x, y, w, h) in PaintBorder(plan))
+        {
+            regions.Add(new Region(x, y, w, h, false));
+        }
+
+        foreach (var (kind, x, y, w, h) in plan.Landmarks)
+        {
+            if (kind is CityLandmark.Township or CityLandmark.SolarPlant)
+                regions.Add(new Region(x, y, w, h, false));
+        }
 
         var (cx, cy) = shape.Centre;
         plan.Spawn = (cx * Pitch + Avenue / 2, cy * Pitch + Avenue / 2);
         DigTunnels(plan);
+        Wire(plan, bank, regions);
         return plan;
+    }
+
+    /// <summary>The district of a zone nearest <paramref name="from"/>, leaving out some.</summary>
+    private static (int X, int Y)? NearestOf(CityPlan plan, (int X, int Y) from, CityZone zone, (int, int)[] except)
+    {
+        (int X, int Y)? best = null;
+        var bestDistance = int.MaxValue;
+        for (var y = 0; y < plan.Districts; y++)
+        {
+            for (var x = 0; x < plan.Districts; x++)
+            {
+                var distance = (x - from.X) * (x - from.X) + (y - from.Y) * (y - from.Y);
+                if (plan.Zone(x, y) != zone || Array.IndexOf(except, (x, y)) >= 0 || distance >= bestDistance)
+                    continue;
+
+                best = (x, y);
+                bestDistance = distance;
+            }
+        }
+
+        return best;
+    }
+
+    private static bool ByTheSea(CityPlan plan, int x, int y, int w, int h)
+    {
+        for (var dy = y - 1; dy <= y + h; dy++)
+        {
+            for (var dx = x - 1; dx <= x + w; dx++)
+            {
+                if (dx >= 0 && dy >= 0 && dx < plan.Districts && dy < plan.Districts && plan.Zone(dx, dy) == CityZone.Ocean)
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
     /// Where the sea and the city lie: the coast runs along one side of the map, and the city grows out from a
-    /// centre one district in from the shore.
+    /// centre one district in from the shore. Along the coast, one side of the centre is rich and the other poor.
     /// </summary>
     private sealed class Shape
     {
@@ -293,6 +422,10 @@ public static class CityGenerator
         private readonly float _radius;
         private readonly float[] _jitter;
 
+        /// <summary>Which way along the coast the rich side lies, and how ragged its edge is.</summary>
+        private readonly int _lean;
+        private readonly float[] _leanJitter;
+
         public Shape(int districts, CyberRng rng)
         {
             _districts = districts;
@@ -300,7 +433,7 @@ public static class CityGenerator
 
             // How many districts of sea there are at each point along the coast.
             _shore = new int[districts];
-            var (shallowest, deepest) = (Math.Max(1, districts / 4), districts / 3 + 1);
+            var (shallowest, deepest) = (Math.Max(1, districts / 4), districts / 4 + 1);
             _shore[0] = rng.Range(shallowest, deepest);
             for (var v = 1; v < districts; v++)
             {
@@ -309,12 +442,16 @@ public static class CityGenerator
 
             var cv = rng.Range(districts / 2 - 1, districts / 2);
             Centre = FromCoast(_shore[cv] + 1, cv);
-            _radius = districts * 0.27f + rng.Range(0, 6) / 10f;
+            _radius = districts * 0.28f + rng.Range(0, 6) / 10f;
             _jitter = new float[districts * districts];
+            _leanJitter = new float[districts * districts];
             for (var i = 0; i < _jitter.Length; i++)
             {
                 _jitter[i] = rng.Range(-5, 5) / 10f;
+                _leanJitter[i] = rng.Range(-8, 8) / 10f;
             }
+
+            _lean = rng.Chance(1, 2) ? 1 : -1;
         }
 
         /// <summary>
@@ -358,39 +495,81 @@ public static class CityGenerator
             return open.Length > 0 ? open : new[] { CityZone.Badlands, CityZone.Scrub };
         }
 
-        /// <summary>The zones a district may be for how far it is from the sea and the city centre.</summary>
+        /// <summary>How far a district is from the city centre, in districts, roughened a little.</summary>
+        public float Distance(int x, int y)
+        {
+            var (u, v) = ToCoast(x, y);
+            var (cu, cv) = ToCoast(Centre.X, Centre.Y);
+            return MathF.Sqrt((u - cu) * (u - cu) + (v - cv) * (v - cv)) + _jitter[y * _districts + x];
+        }
+
+        /// <summary>
+        /// The zones a district may be for how far it is from the sea and the city centre, and which side of the
+        /// centre it's on. The rich side has the civic centre and the wealthy; the poor side has industry and the
+        /// shanty town. Districts near the line between them may be either.
+        /// </summary>
         private CityZone[] Ring(int x, int y)
         {
             if ((x, y) == Centre)
-                return new[] { CityZone.Downtown };
+                return new[] { CityZone.Corporate };
 
             var (u, v) = ToCoast(x, y);
             var shore = _shore[v];
             if (u < shore - 1)
                 return new[] { CityZone.Ocean };
 
-            if (u == shore - 1)
-                return new[] { CityZone.Ocean, CityZone.Coast, CityZone.Docks };
-
-            var (cu, cv) = ToCoast(Centre.X, Centre.Y);
-            var r = MathF.Sqrt((u - cu) * (u - cu) + (v - cv) * (v - cv)) + _jitter[y * _districts + x];
+            var (_, cv) = ToCoast(Centre.X, Centre.Y);
+            var lean = _lean * (v - cv) + _leanJitter[y * _districts + x];
+            var (rich, poor) = (lean > -0.6f, lean < 0.6f);
+            var r = Distance(x, y);
             var zones = new List<CityZone>();
-            if (r <= _radius * 0.5f)
-                zones.AddRange(new[] { CityZone.Downtown, CityZone.Commercial, CityZone.Park });
+            void Add(bool side, params CityZone[] add)
+            {
+                if (side)
+                    zones.AddRange(add.Where(z => !zones.Contains(z)));
+            }
+
+            if (u == shore - 1)
+            {
+                zones.AddRange(new[] { CityZone.Ocean, CityZone.Coast });
+                Add(poor && r <= _radius + 1, CityZone.Industrial);
+                return zones.ToArray();
+            }
+
+            if (r <= _radius * 0.3f)
+            {
+                Add(true, CityZone.Corporate, CityZone.Commercial);
+            }
+            else if (r <= _radius * 0.55f)
+            {
+                Add(rich, CityZone.Commercial, CityZone.Public, CityZone.Corporate);
+                Add(poor, CityZone.Commercial, CityZone.MediumClass);
+            }
             else if (r <= _radius * 0.8f)
-                zones.AddRange(new[] { CityZone.Commercial, CityZone.Residential, CityZone.Industrial, CityZone.Slums, CityZone.Park });
+            {
+                Add(rich, CityZone.Public, CityZone.HighClass, CityZone.MediumClass, CityZone.Commercial);
+                Add(poor, CityZone.MediumClass, CityZone.LowClass, CityZone.Industrial, CityZone.Commercial);
+            }
             else if (r <= _radius)
-                zones.AddRange(new[] { CityZone.Residential, CityZone.Industrial, CityZone.Slums, CityZone.Commercial });
+            {
+                Add(rich, CityZone.HighClass, CityZone.MediumClass);
+                Add(poor, CityZone.LowClass, CityZone.Industrial, CityZone.Shanty, CityZone.MediumClass);
+            }
             else if (r <= _radius + 1.2f)
-                zones.AddRange(new[] { CityZone.Slums, CityZone.Industrial, CityZone.Residential, CityZone.Scrub, CityZone.Badlands });
+            {
+                Add(rich, CityZone.MediumClass, CityZone.Scrub, CityZone.Badlands);
+                Add(poor, CityZone.Shanty, CityZone.LowClass, CityZone.Industrial, CityZone.Scrub, CityZone.Badlands);
+            }
             else
-                zones.AddRange(new[] { CityZone.Badlands, CityZone.Scrub, CityZone.Solar });
+            {
+                Add(true, CityZone.Badlands, CityZone.Scrub);
+            }
 
             if (u == shore)
             {
-                zones.Add(CityZone.Coast);
-                if (r <= _radius)
-                    zones.Add(CityZone.Docks);
+                Add(true, CityZone.Coast);
+                Add(rich && r <= _radius, CityZone.HighClass);
+                Add(poor && r <= _radius + 1.2f, CityZone.Industrial, CityZone.Shanty);
             }
 
             return zones.ToArray();
@@ -400,6 +579,9 @@ public static class CityGenerator
         public CityZone Fallback(int x, int y)
         {
             var (u, v) = ToCoast(x, y);
+            if ((x, y) == Centre)
+                return CityZone.Corporate;
+
             return u < _shore[v] - 1 ? CityZone.Ocean : u == _shore[v] - 1 ? CityZone.Coast : CityZone.Badlands;
         }
     }
@@ -574,7 +756,7 @@ public static class CityGenerator
                         _plan.Set(x, y, CityFloor.Ocean);
                     else if (sea > 0.4f)
                         _plan.Set(x, y, CityFloor.Sand);
-                    else if (zone is CityZone.Badlands or CityZone.Scrub && sea < 0.25f && Mountain(x, y))
+                    else if (zone is CityZone.Badlands or CityZone.Scrub or CityZone.Township && sea < 0.25f && Mountain(x, y))
                         _plan.Set(x, y, Land(zone, x, y), CityStructure.Mountain);
                     else
                         _plan.Set(x, y, Land(zone, x, y), Scatter(zone, x, y));
@@ -604,7 +786,7 @@ public static class CityGenerator
             return zone switch
             {
                 CityZone.Ocean or CityZone.Coast => n < 0.6f ? CityFloor.Sand : CityFloor.Desert,
-                CityZone.Scrub => n < 0.35f ? CityFloor.Dirt : n < 0.7f ? CityFloor.WildGrass : CityFloor.Desert,
+                CityZone.Scrub or CityZone.Township => n < 0.35f ? CityFloor.Dirt : n < 0.7f ? CityFloor.WildGrass : CityFloor.Desert,
                 CityZone.Badlands or CityZone.Solar => n < 0.3f ? CityFloor.LowDesert : n < 0.75f ? CityFloor.Desert : CityFloor.Sand,
                 _ => CityFloor.Dirt,
             };
@@ -636,7 +818,11 @@ public static class CityGenerator
     /// Avenues are streets with sidewalks wherever they touch a built-up district. Out in the badlands, the two
     /// running along the city centre's south and west edges carry on as highways; the rest are left as land.
     /// </summary>
-    private static void PaintAvenues(CityPlan plan, Shape shape)
+    /// <returns>
+    /// What each avenue is: those running north to south by line and district, then those running east to west by
+    /// district and line.
+    /// </returns>
+    private static (Road[,] Vertical, Road[,] Horizontal) PaintAvenues(CityPlan plan, Shape shape)
     {
         var n = plan.Districts;
         var (cx, cy) = shape.Centre;
@@ -690,6 +876,8 @@ public static class CityGenerator
                 PaintJunction(plan, i * Pitch, j * Pitch, around);
             }
         }
+
+        return (vertical, horizontal);
     }
 
     /// <summary>
@@ -786,22 +974,6 @@ public static class CityGenerator
         }
     }
 
-    /// <summary>Rows of panels on concrete, either side of a service road.</summary>
-    private static void PaintSolarFarm(CityPlan plan, int ox, int oy)
-    {
-        const int mid = DistrictSize / 2;
-        for (var y = 3; y < DistrictSize - 3; y++)
-        {
-            for (var x = 3; x < DistrictSize - 3; x++)
-            {
-                if (Math.Abs(x - mid) <= 1)
-                    plan.Set(ox + x, oy + y, CityFloor.Asphalt);
-                else if (y % 3 == 0)
-                    plan.Set(ox + x, oy + y, CityFloor.Concrete, CityStructure.SolarPanel);
-            }
-        }
-    }
-
     /// <summary>A roofless shack falling apart in the badlands.</summary>
     private static void PaintRuin(CityPlan plan, int ox, int oy, CyberRng rng)
     {
@@ -873,7 +1045,8 @@ public static class CityGenerator
     /// The edge of the map: a fence round the city with a checkpoint wherever a highway crosses it, and beyond
     /// that the boundary wall. The fence runs over land only, so it ends at the sea and gaps where mountains stand.
     /// </summary>
-    private static void PaintBorder(CityPlan plan)
+    /// <returns>The checkpoints, as their bottom-left tile and size.</returns>
+    private static List<(int X, int Y, int W, int H)> PaintBorder(CityPlan plan)
     {
         var (near, far) = (FenceInset, plan.Size - 1 - FenceInset);
         var ring = new List<(int X, int Y)>();
@@ -915,11 +1088,13 @@ public static class CityGenerator
                 plan.Set(x, y, plan.Floor(x, y), CityStructure.Fence);
         }
 
+        var areas = new List<(int X, int Y, int W, int H)>();
         foreach (var (x, y, vertical) in checkpoints)
         {
             // Towards the middle of the map, so the booths' doors face the city.
             var inward = (vertical ? y : x) < plan.Size / 2 ? 1 : -1;
             PaintCheckpoint(plan, x, y, vertical, inward);
+            areas.Add(vertical ? (x - 9, y - 3, 19, 7) : (x - 3, y - 9, 7, 19));
         }
 
         for (var y = 0; y < plan.Size; y++)
@@ -930,6 +1105,8 @@ public static class CityGenerator
                     plan.SetStructure(x, y, CityStructure.BoundaryWall);
             }
         }
+
+        return areas;
     }
 
     /// <summary>How many tiles of asphalt run from a tile in a direction.</summary>

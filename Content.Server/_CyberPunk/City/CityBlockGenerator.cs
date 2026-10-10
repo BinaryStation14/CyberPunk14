@@ -736,7 +736,7 @@ public static class CityBlockGenerator
         return (tiles, rules);
     });
 
-    private sealed class UnionFind
+    internal sealed class UnionFind
     {
         private readonly int[] _parent;
 

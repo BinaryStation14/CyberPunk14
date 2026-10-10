@@ -8,20 +8,39 @@ public enum CityZone : byte
     Ocean,
     /// <summary>Where land meets the sea: beach, shallows and dunes.</summary>
     Coast,
-    /// <summary>The port: warehouses on the waterfront.</summary>
-    Docks,
     /// <summary>Corporate towers in the middle of the city.</summary>
-    Downtown,
+    Corporate,
+    /// <summary>Shops, markets, bars and clubs.</summary>
     Commercial,
-    Residential,
+    /// <summary>City hall, the police, the hospital, the transit station and parks.</summary>
+    Public,
+    HighClass,
+    MediumClass,
+    LowClass,
+    /// <summary>Factories and warehouses, and the port where they meet the sea.</summary>
     Industrial,
-    Slums,
-    Park,
+    /// <summary>Shacks and ruins at the city's fringe.</summary>
+    Shanty,
     Badlands,
     /// <summary>Dry dirt and brush between the city and the badlands.</summary>
     Scrub,
-    /// <summary>A solar farm out past the city.</summary>
+    /// <summary>A sparse township along a road out in the badlands.</summary>
+    Township,
+    /// <summary>The city's solar power plant.</summary>
     Solar,
+}
+
+/// <summary>The buildings and places every city has.</summary>
+public enum CityLandmark : byte
+{
+    Headquarters,
+    CityHall,
+    PoliceStation,
+    Hospital,
+    TransitStation,
+    Megabuilding,
+    SolarPlant,
+    Township,
 }
 
 public enum CityFloor : byte
@@ -54,6 +73,7 @@ public enum CityStructure : byte
     WallRust,
     WallBrick,
     WallConcrete,
+    WallWood,
     Girder,
     Window,
     WindowReinforced,
@@ -68,6 +88,27 @@ public enum CityStructure : byte
     /// <summary>The wall round the edge of the map that nobody gets past.</summary>
     BoundaryWall,
     Fence,
+    /// <summary>A battery bank storing high-voltage power.</summary>
+    Smes,
+    /// <summary>Steps high-voltage power down to medium voltage for a block.</summary>
+    Substation,
+}
+
+/// <summary>The cables under a tile, by voltage.</summary>
+[Flags]
+public enum CityCable : byte
+{
+    None = 0,
+    High = 1,
+    Medium = 2,
+    Low = 4,
+}
+
+/// <summary>Power fittings that face a way: a wall-mounted APC, or a cable terminal feeding an SMES.</summary>
+public enum CityFixture : byte
+{
+    Apc,
+    Terminal,
 }
 
 /// <summary>
@@ -80,6 +121,7 @@ public sealed class CityPlan
     public readonly int Size;
     public readonly CityFloor[] Floors;
     public readonly CityStructure[] Structures;
+    public readonly CityCable[] Cables;
 
     /// <summary>Each district's zone, row by row from the bottom.</summary>
     public readonly CityZone[] Zones;
@@ -87,12 +129,19 @@ public sealed class CityPlan
     /// <summary>A street tile in the middle of the city where people arrive.</summary>
     public (int X, int Y) Spawn;
 
+    /// <summary>Where each landmark stands, as its bottom-left tile and size.</summary>
+    public readonly List<(CityLandmark Kind, int X, int Y, int W, int H)> Landmarks = new();
+
+    /// <summary>Power fittings, each with the direction it faces as an index into the WFC directions.</summary>
+    public readonly List<(CityFixture Kind, int X, int Y, int Direction)> Fixtures = new();
+
     public CityPlan(int districts)
     {
         Districts = districts;
         Size = districts * CityGenerator.Pitch + CityGenerator.Avenue;
         Floors = new CityFloor[Size * Size];
         Structures = new CityStructure[Size * Size];
+        Cables = new CityCable[Size * Size];
         Zones = new CityZone[districts * districts];
     }
 
@@ -120,6 +169,16 @@ public sealed class CityPlan
     public void SetStructure(int x, int y, CityStructure structure)
     {
         Structures[y * Size + x] = structure;
+    }
+
+    public CityCable Cable(int x, int y)
+    {
+        return Cables[y * Size + x];
+    }
+
+    public void AddCable(int x, int y, CityCable cable)
+    {
+        Cables[y * Size + x] |= cable;
     }
 
     public CityZone Zone(int dx, int dy)
