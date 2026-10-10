@@ -21,6 +21,7 @@ cyberspace-jack-in-remote = Your deck reaches into {THE($device)} through the ai
 cyberspace-jack-in-remote-others = {CAPITALIZE(THE($user))} points a cyberdeck at {THE($device)} and goes still.
 cyberspace-jack-in-practice = You jack into your deck's practice grid. The room falls away into light.
 cyberspace-jack-in-practice-others = {CAPITALIZE(THE($user))} jacks into a cyberdeck and goes still.
+cyberspace-examined-jacked-in = [color=lightblue]{ CAPITALIZE(SUBJECT($ent)) } { CONJUGATE-HAVE($ent) } a far-off, unblinking stare. { CAPITALIZE(POSS-ADJ($ent)) } mind is somewhere in cyberspace.[/color]
 
 cyberspace-jack-out = You jack out. The world comes back.
 cyberspace-lost-connection = You lose the connection.
