@@ -117,8 +117,37 @@ public static class CyberRegionGenerator
     /// Routes every link as a corridor of cells from pad to pad, around other pads and the corridors on the other
     /// side of a firewall. Returns the sides each cell's paths leave by.
     /// </summary>
-    private static Dictionary<(int, int), bool[]> Route(int width, int height, RegionGraph graph)
+    /// <remarks>
+    /// With firewalls, one side's corridor can cut off a link on the other, so links through firewalls go first
+    /// and, if a link still can't be routed, they're tried again in other orders.
+    /// </remarks>
+    private static Dictionary<(int, int), bool[]> Route(int width, int height, RegionGraph graph, ref CyberRng rng)
     {
+        var order = Enumerable.Range(0, graph.Links.Count)
+            .OrderBy(l => graph.Zones is { } z && (z[graph.Links[l].A] < 0 || z[graph.Links[l].B] < 0) ? 0 : 1)
+            .ToList();
+
+        Dictionary<(int, int), bool[]>? best = null;
+        var bestMissed = int.MaxValue;
+        for (var attempt = 0; attempt < Attempts; attempt++)
+        {
+            var sides = Route(width, height, graph, order, out var missed);
+            if (missed < bestMissed)
+                (best, bestMissed) = (sides, missed);
+
+            if (missed == 0)
+                break;
+
+            rng.Shuffle(order);
+        }
+
+        return best!;
+    }
+
+    private static Dictionary<(int, int), bool[]> Route(int width, int height, RegionGraph graph, List<int> order,
+        out int missed)
+    {
+        missed = 0;
         var sides = new Dictionary<(int, int), bool[]>();
         bool[] SidesOf((int, int) cell)
         {
@@ -136,7 +165,7 @@ public static class CyberRegionGenerator
 
         // The cells each side's corridors run through.
         var sideOf = new Dictionary<(int, int), int>();
-        for (var link = 0; link < graph.Links.Count; link++)
+        foreach (var link in order)
         {
             var (a, b) = graph.Links[link];
             var (from, to) = (graph.Pads[a].Slot, graph.Pads[b].Slot);
@@ -179,7 +208,10 @@ public static class CyberRegionGenerator
             }
 
             if (!found)
+            {
+                missed++;
                 continue;
+            }
 
             var back = to;
             while (back != from)
@@ -205,7 +237,8 @@ public static class CyberRegionGenerator
     public static CyberFloor[] Generate(ulong seed, RegionShape shape, RegionGraph graph)
     {
         var (w, h) = (shape.Width, shape.Height);
-        var sides = Route(w, h, graph);
+        var rng = new CyberRng(seed);
+        var sides = Route(w, h, graph, ref rng);
         if (graph.Gate is { } gate)
         {
             var cell = graph.Pads[gate].Slot;
@@ -246,7 +279,6 @@ public static class CyberRegionGenerator
             return set;
         }
 
-        var rng = new CyberRng(seed);
         int[]? solved = null;
         for (var attempt = 0UL; attempt < Attempts; attempt++)
         {
