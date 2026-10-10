@@ -67,6 +67,7 @@ public sealed partial class CyberspaceSystem
         SubscribeLocalEvent<CyberAvatarComponent, CyberJackOutActionEvent>(OnJackOutAction);
         SubscribeLocalEvent<CyberAvatarComponent, CyberOpenDeckActionEvent>(OnOpenDeckAction);
         SubscribeLocalEvent<CyberAvatarComponent, MindUnvisitedMessage>(OnAvatarUnvisited);
+        SubscribeLocalEvent<NetrunnerComponent, ExaminedEvent>(OnRunnerExamined);
     }
 
     private void OnDeckAfterInteract(Entity<CyberdeckComponent> ent, ref AfterInteractEvent args)
@@ -267,6 +268,8 @@ public sealed partial class CyberspaceSystem
         var avatar = Spawn(AvatarPrototype, new EntityCoordinates(_mapUid!.Value, 0.5f, 0.5f));
         _meta.SetEntityName(avatar, Name(runner));
         TakeShape(avatar, runner);
+        // Its mind only visits, so it would always read as catatonic.
+        RemComp<MindExaminableComponent>(avatar);
         var comp = EnsureComp<CyberAvatarComponent>(avatar);
         comp.Body = runner;
         _actions.AddAction(avatar, ref comp.JackOutAction, JackOutAction);
@@ -355,6 +358,12 @@ public sealed partial class CyberspaceSystem
     {
         // Their mind left some other way, like ghosting.
         JackOut(ent.Comp.Body, Loc.GetString("cyberspace-lost-connection"), false);
+    }
+
+    private void OnRunnerExamined(Entity<NetrunnerComponent> ent, ref ExaminedEvent args)
+    {
+        if (ent.Comp.JackedIn != null && args.IsInDetailsRange)
+            args.PushMarkup(Loc.GetString("cyberspace-examined-jacked-in", ("ent", ent.Owner)));
     }
 
     /// <summary>
