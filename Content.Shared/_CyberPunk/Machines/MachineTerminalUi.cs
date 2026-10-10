@@ -45,16 +45,53 @@ public sealed class MachineTerminalOutputMessage : BoundUserInterfaceMessage
 }
 
 /// <summary>
-/// Keys pressed at a machine's terminal, in order, as codes from <see cref="TerminalKeys"/>.
+/// Keys pressed at a machine's terminal, in order, as codes from <see cref="TerminalKeys"/>. The server answers
+/// with a <see cref="MachineTerminalKeysHandledMessage"/> carrying the same <see cref="Sequence"/>.
 /// </summary>
 [Serializable, NetSerializable]
 public sealed class MachineTerminalKeysMessage : BoundUserInterfaceMessage
 {
     public readonly int[] Keys;
+    public readonly uint Sequence;
 
-    public MachineTerminalKeysMessage(int[] keys)
+    public MachineTerminalKeysMessage(int[] keys, uint sequence = 0)
     {
         Keys = keys;
+        Sequence = sequence;
+    }
+}
+
+/// <summary>
+/// Tells whoever sent a <see cref="MachineTerminalKeysMessage"/> that its keys are handled, and their echo is
+/// on the screen, so they can stop showing their own.
+/// </summary>
+[Serializable, NetSerializable]
+public sealed class MachineTerminalKeysHandledMessage : BoundUserInterfaceMessage
+{
+    public readonly uint Sequence;
+
+    /// <summary>The line being typed after the keys, for the client's own echo to start from.</summary>
+    public readonly string Line;
+
+    public MachineTerminalKeysHandledMessage(uint sequence, string line)
+    {
+        Sequence = sequence;
+        Line = line;
+    }
+}
+
+/// <summary>
+/// Whether a machine's terminal echoes what's typed onto the line, so clients can show it before the echo
+/// comes back. It doesn't in raw mode, or while the machine isn't running.
+/// </summary>
+[Serializable, NetSerializable]
+public sealed class MachineTerminalEchoMessage : BoundUserInterfaceMessage
+{
+    public readonly bool Echo;
+
+    public MachineTerminalEchoMessage(bool echo)
+    {
+        Echo = echo;
     }
 }
 

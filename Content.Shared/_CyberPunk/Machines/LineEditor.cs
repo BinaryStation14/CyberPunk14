@@ -5,7 +5,8 @@ namespace Content.Shared._CyberPunk.Machines;
 
 /// <summary>
 /// Turns keys into lines while the terminal isn't in raw mode, as a real terminal does: it echoes what's typed,
-/// Backspace rubs out, Up and Down step through earlier lines, and Enter hands the line over.
+/// Backspace rubs out, Up and Down step through earlier lines, and Enter hands the line over. The server runs
+/// one for each machine, and a client runs one to show what it typed before the server's echo comes back.
 /// </summary>
 public sealed class LineEditor
 {
@@ -20,10 +21,15 @@ public sealed class LineEditor
     private int _recalled;
 
     /// <param name="screen">Where the echo goes.</param>
-    public LineEditor(StringBuilder screen)
+    /// <param name="line">What's already typed on the line, which isn't echoed again.</param>
+    public LineEditor(StringBuilder screen, string line = "")
     {
         _screen = screen;
+        _line.Append(line);
     }
+
+    /// <summary>The line being typed.</summary>
+    public string Line => _line.ToString();
 
     /// <summary>
     /// Handles a key, and returns the line when it's Enter.

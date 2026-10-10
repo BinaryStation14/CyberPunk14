@@ -17,6 +17,11 @@ namespace Content.Client._CyberPunk.Machines;
 /// showing the end of its output, which the mouse wheel scrolls back through. It takes the keyboard while it
 /// has focus and reports every key with <see cref="OnKeys"/>.
 /// </summary>
+/// <remarks>
+/// While the machine echoes what's typed, the screen echoes keys itself as they're pressed, on top of what the
+/// server last sent, until the server says it has handled them and its own echo is in its output. If the guess
+/// was wrong, such as when a program went into raw mode, the screen just goes back to what the server sent.
+/// </remarks>
 public sealed partial class TerminalScreen : Control
 {
     [Dependency] private IInputManager _input = default!;
@@ -38,6 +43,15 @@ public sealed partial class TerminalScreen : Control
     private string _screen = "";
     private int _scroll;
 
+    private bool _echo;
+
+    /// <summary>The line being typed, as of the last keys the server handled.</summary>
+    private string _line = "";
+
+    /// <summary>Keys sent and not yet handled by the server, and the number they went with.</summary>
+    private readonly List<(uint Sequence, int[] Keys)> _unhandled = new();
+    private uint _sequence;
+
     /// <summary>Where a program marked its cursor (<see cref="TerminalText.Cursor"/>), as a row and column.</summary>
     private (int Row, int Column)? _cursor;
     private TimeSpan _blink;
@@ -45,9 +59,10 @@ public sealed partial class TerminalScreen : Control
     private GameTick _sentTick;
 
     /// <summary>
-    /// Keys pressed, in order, as codes from <see cref="TerminalKeys"/>.
+    /// Keys pressed, in order, as codes from <see cref="TerminalKeys"/>, and a number for
+    /// <see cref="KeysHandled"/>.
     /// </summary>
-    public event Action<int[]>? OnKeys;
+    public event Action<int[], uint>? OnKeys;
 
     public TerminalScreen()
     {
@@ -83,21 +98,67 @@ public sealed partial class TerminalScreen : Control
         Refresh();
     }
 
+    /// <summary>
+    /// Sets whether the machine echoes what's typed, and so whether the screen does too.
+    /// </summary>
+    public void SetEcho(bool echo)
+    {
+        _echo = echo;
+        Refresh();
+    }
+
+    /// <summary>
+    /// Stops echoing keys the server has handled, since their echo is in its output now.
+    /// </summary>
+    public void KeysHandled(uint sequence, string line)
+    {
+        _unhandled.RemoveAll(sent => sent.Sequence <= sequence);
+        _line = line;
+        Refresh();
+    }
+
+    /// <summary>
+    /// The server's screen with the keys it hasn't handled yet echoed on the end.
+    /// </summary>
+    private string Shown()
+    {
+        if (!_echo || (_unhandled.Count == 0 && _pressed.Count == 0))
+            return _screen;
+
+        var echo = new StringBuilder();
+        var editor = new LineEditor(echo, _line);
+        foreach (var (_, keys) in _unhandled)
+        {
+            foreach (var key in keys)
+            {
+                editor.Key(key);
+            }
+        }
+
+        foreach (var key in _pressed)
+        {
+            editor.Key(key);
+        }
+
+        return TerminalText.Apply(_screen, echo.ToString());
+    }
+
     private void Refresh()
     {
+        var screen = Shown();
         _lines.Clear();
         _cursor = null;
-        var mark = _screen.LastIndexOf(TerminalText.Cursor);
+        var mark = screen.LastIndexOf(TerminalText.Cursor);
         if (mark >= 0)
         {
             // The cursor is wherever the next character after the text before the mark would go.
-            WrapLines(_screen[..mark], Columns, _lines);
+            WrapLines(screen[..mark], Columns, _lines);
             var column = _lines[^1].EnumerateRunes().Count();
             _cursor = column == Columns ? (_lines.Count, 0) : (_lines.Count - 1, column);
             _lines.Clear();
         }
 
-        WrapLines(_screen, Columns, _lines);
+        WrapLines(screen, Columns, _lines);
         _scroll = 0;
     }
 
@@ -204,8 +265,11 @@ public sealed partial class TerminalScreen : Control
         if (_pressed.Count > 0 && _timing.CurTick != _sentTick)
         {
             _sentTick = _timing.CurTick;
-            OnKeys?.Invoke(_pressed.ToArray());
+            var keys = _pressed.ToArray();
             _pressed.Clear();
+            _sequence++;
+            _unhandled.Add((_sequence, keys));
+            OnKeys?.Invoke(keys, _sequence);
         }
     }
 
@@ -213,6 +277,8 @@ public sealed partial class TerminalScreen : Control
     {
         _pressed.Add(key);
         _scroll = 0;
+        if (_echo)
+            Refresh();
     }
 
     protected override void MouseWheel(GUIMouseWheelEventArgs args)

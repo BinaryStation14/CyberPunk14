@@ -284,6 +284,14 @@ public sealed partial class WasmMachineSystem : EntitySystem
                 _ui.ServerSendUiMessage(ent.Owner, MachineTerminalUiKey.Key, new MachineTerminalTitleMessage(title));
         }
 
+        var echo = ent.Comp.Vm?.Echoes ?? false;
+        if (echo != ent.Comp.ShownEcho)
+        {
+            ent.Comp.ShownEcho = echo;
+            if (open)
+                _ui.ServerSendUiMessage(ent.Owner, MachineTerminalUiKey.Key, new MachineTerminalEchoMessage(echo));
+        }
+
         // Each UI a program shows is a new tree, and showing the same text again keeps the old one.
         var ui = ent.Comp.Vm?.Ui;
         if (ReferenceEquals(ui, ent.Comp.ShownUi))
@@ -316,6 +324,7 @@ public sealed partial class WasmMachineSystem : EntitySystem
             actor);
         _ui.ServerSendUiMessage(ent.Owner, MachineTerminalUiKey.Key, new MachineTerminalUiMessage(ent.Comp.ShownUi), actor);
         _ui.ServerSendUiMessage(ent.Owner, MachineTerminalUiKey.Key, new MachineTerminalTitleMessage(ent.Comp.ShownTitle), actor);
+        _ui.ServerSendUiMessage(ent.Owner, MachineTerminalUiKey.Key, new MachineTerminalEchoMessage(ent.Comp.ShownEcho), actor);
     }
 
     private void OnTerminalUiEvent(Entity<WasmMachineComponent> ent, ref MachineTerminalUiEventMessage args)
@@ -335,6 +344,14 @@ public sealed partial class WasmMachineSystem : EntitySystem
         {
             TypeKey(ent, key);
         }
+
+        // The echo goes out now rather than on the next machine tick, ahead of the answer that tells the
+        // sender to stop showing its own.
+        CollectOutput(ent);
+        _ui.ServerSendUiMessage(ent.Owner,
+            MachineTerminalUiKey.Key,
+            new MachineTerminalKeysHandledMessage(args.Sequence, ent.Comp.Vm?.Line ?? ""),
+            args.Actor);
     }
 }
 
