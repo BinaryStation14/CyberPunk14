@@ -1,0 +1,13 @@
+# ward: the deck's shield, which comes with every deck. Hold it (`hold
+# ward`) and use it to raise a ward: strikes on you are halved for 2
+# seconds. It can go up again 6 seconds after it last went up.
+#
+# It is a Wire program like any other: `new myward ward` copies it to change.
+
+if deck.integrity() == None:
+    print("ward: only runs on a deck in cyberspace")
+    sys.exit(1)
+elif deck.ward():
+    print("ward: up")
+else:
+    print("ward: not ready yet")

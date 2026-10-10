@@ -142,18 +142,29 @@
   - type: DoAfter
   - type: WasmMachine
     kind: Deck
+    filesFrom: ComputerProgrammable
     files:
       readme.txt: |
         YOUR DECK
 
         This is your deck: your virtual body is a computer, and this is its disk.
         It keeps its files between runs, and its programs reach whatever network
-        you jacked into (ip shows your address on it).
+        you jacked into (ip shows your address on it). It has the examples a
+        programmable computer has: `ls examples`, then `cat` one.
 
         Walk the paths to find the machines on the network: each has a node on
         its pad, and the router's pad opens onto the bus that joins every
         network to the backbone. Use a node to open its machine; one your ID
         doesn't open takes three seconds at its node to breach.
+
+        `hold blade` puts your deck's weapon in your hand: use it on another
+        runner to strike them, until they're cut out of cyberspace. `hold ward`
+        is a shield that halves strikes on you for two seconds. Build your own
+        with `new NAME deck`, then hold the program it builds (man deck).
+
+        `push FILE` copies a file onto the computer whose node you stand at,
+        once you're through its lock; `push ADDR FILE` copies it over the
+        network to a computer your ID opens.
 
         Jack out from the action bar, and open this terminal again from there.
         Lose your deck, your body or your way, and you're thrown out with
@@ -240,6 +251,23 @@
     nameLocId: cyberspace-proxy-id-name
     fullNameLocId: cyberspace-proxy-id-full-name
   - type: CyberProxyId
+
+# A program in a runner's virtual hand: used, it runs on their deck, at whatever it's used on. Dropped, it's gone.
+- type: entity
+  parent: BaseItem
+  id: CyberProgram
+  name: program
+  description: A program, held ready. Use it to run it, or use it on something to run it at that.
+  categories: [ HideSpawnMenu ]
+  components:
+  - type: Sprite
+    sprite: Objects/Misc/cd.rsi
+    state: icon
+    color: "#80E5FF"
+  - type: Item
+    size: Tiny
+    sprite: Objects/Misc/cd.rsi
+  - type: CyberProgram
 
 # The computer of a practice grid, on nobody's network but the grid's.
 - type: entity

@@ -74,6 +74,43 @@ public sealed partial class CyberAvatarComponent : Component
     /// </summary>
     [ViewVariables]
     public HashSet<EntityUid> Breached = new();
+
+    /// <summary>
+    /// What strikes have left of them this run: at none they're thrown out.
+    /// </summary>
+    [ViewVariables]
+    public int Integrity = CyberspaceSystem.MaxIntegrity;
+
+    /// <summary>
+    /// When their deck can strike again.
+    /// </summary>
+    [ViewVariables]
+    public TimeSpan StrikeReadyAt;
+
+    /// <summary>
+    /// When their ward comes down.
+    /// </summary>
+    [ViewVariables]
+    public TimeSpan WardUntil;
+
+    /// <summary>
+    /// When they can raise a ward again.
+    /// </summary>
+    [ViewVariables]
+    public TimeSpan WardReadyAt;
+}
+
+/// <summary>
+/// A program held in a runner's virtual hand: used, it runs on their deck, or at whatever it's used on.
+/// </summary>
+[RegisterComponent, Access(typeof(CyberspaceSystem))]
+public sealed partial class CyberProgramComponent : Component
+{
+    /// <summary>
+    /// The file on their deck it runs, or the name of a program that comes with the deck.
+    /// </summary>
+    [ViewVariables]
+    public string File = "";
 }
 
 /// <summary>

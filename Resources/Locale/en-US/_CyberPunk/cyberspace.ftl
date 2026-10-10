@@ -36,6 +36,19 @@ cyberspace-node-no-ui = There's nothing to open at {THE($node)}.
 cyberspace-breaching = {CAPITALIZE(THE($node))} is locked. You start breaching it...
 cyberspace-breached = You breach {THE($node)}.
 
+cyberspace-ward-up = Your ward goes up.
+cyberspace-strike = You strike {THE($target)}. Integrity {$integrity}%.
+cyberspace-struck = {CAPITALIZE(THE($striker))} strikes you! Integrity {$integrity}%.
+cyberspace-strike-cut-out = You cut {THE($target)} out of cyberspace.
+cyberspace-cut-down = Another runner cuts you down. Dumpshock!
+
+cyberspace-program-run = You run {$file}.
+cyberspace-program-run-at = You run {$file} at {THE($target)}.
+cyberspace-program-run-others = {CAPITALIZE(THE($user))} runs {$file}.
+cyberspace-program-run-at-others = {CAPITALIZE(THE($user))} runs {$file} at {THE($target)}.
+cyberspace-program-wont-run = {$file} won't run: {$why}.
+cyberspace-program-dropped = You let go of {$file}; it derezzes. It's still on your deck.
+
 species-name-cyber-avatar = Avatar
 reagent-name-ghostlight = ghostlight
 reagent-desc-ghostlight = What a virtual body bleeds: a runner's signal, leaking out of them as glowing light.

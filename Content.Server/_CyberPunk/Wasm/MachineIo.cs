@@ -49,6 +49,28 @@ public sealed record Requester(string Name, string Holding, IReadOnlyList<string
 public sealed record FirmwareFlash(uint To, string Name, byte[] Bytes);
 
 /// <summary>
+/// Something a deck sees in cyberspace: its id, whether it's ICE (else a runner), its name and integrity,
+/// whether it's close enough to strike, and how far it is in tiles.
+/// </summary>
+public sealed record DeckTarget(int Id, bool Ice, string Name, int Integrity, bool InReach, int Distance);
+
+/// <summary>
+/// A deck as it stands in cyberspace this tick, and what it sees, nearest first.
+/// </summary>
+public sealed record DeckView(int Integrity, bool Warded, bool StrikeReady, bool WardReady, IReadOnlyList<DeckTarget> Targets);
+
+/// <summary>
+/// A file a deck is copying to a computer: the one at <paramref name="Address"/>, or with 0 the one whose pad its
+/// runner stands at. <paramref name="Reachable"/> is whether the deck reaches that address over the network.
+/// </summary>
+public sealed record DeckPush(uint Address, bool Reachable, string File, byte[] Data);
+
+/// <summary>
+/// What a deck's programs asked of cyberspace in one tick. The world carries it out after the tick.
+/// </summary>
+public sealed record DeckOrders(int? Strike, bool Ward, string? Hold, DeckPush? Push);
+
+/// <summary>
 /// The machines with a UI of their own that a computer's programs reach over the network.
 /// </summary>
 public interface IMachineDevices
@@ -160,6 +182,20 @@ public sealed class MachineIo
 
     /// <summary>A colour, as #RRGGBB, a program asked the deck to show in since the world last looked.</summary>
     public string? DeckColour;
+
+    /// <summary>The deck as it stands in cyberspace, set by the world before each tick; null on anything else.</summary>
+    public DeckView? DeckView;
+
+    /// <summary>The target a program asked the deck to strike since the world last looked.</summary>
+    public int? DeckStrike;
+
+    /// <summary>Whether a program asked the deck to raise a ward since the world last looked.</summary>
+    public bool DeckWard;
+
+    /// <summary>The program a program asked the runner to hold since the world last looked.</summary>
+    public string? DeckHold;
+
+    public DeckPush? DeckPush;
 
     /// <summary>Every hostname the routers know on the machine's network, and its address.</summary>
     public IReadOnlyDictionary<string, uint> Hosts = new Dictionary<string, uint>();

@@ -5,6 +5,7 @@ using System.Numerics;
 using Content.IntegrationTests.Fixtures;
 using Content.Server._CyberPunk.Cyberspace;
 using Content.Server._CyberPunk.Machines;
+using Content.Server._CyberPunk.Wasm;
 using Content.Server.Body.Components;
 using Content.Shared._CyberPunk.Cyberspace;
 using Content.Shared._CyberPunk.Machines;
@@ -620,6 +621,123 @@ public sealed class CyberspaceTest : GameTest
             Assert.That(cyberspace.IsJackedIn(runner, out var avatar));
             Assert.That(ui.IsUiOpen(console, _entMan.GetComponent<ActivatableUIComponent>(console).Key, avatar!.Value),
                 "it stays open across maps");
+        });
+    }
+
+    /// <summary>
+    /// A deck comes with a programmable computer's examples. Its runner holds programs in their virtual hands and
+    /// pushes files onto computers they may use, and a blade used on another runner strikes them until they're cut
+    /// out of cyberspace.
+    /// </summary>
+    [Test]
+    public async Task RunnersHoldProgramsPushFilesAndStrike()
+    {
+        var server = Pair.Server;
+        _entMan = server.ResolveDependency<IEntityManager>();
+        var machines = _entMan.System<WasmMachineSystem>();
+        var cyberspace = _entMan.System<CyberspaceSystem>();
+        var mapSys = _entMan.System<SharedMapSystem>();
+        var power = _entMan.System<SharedPowerReceiverSystem>();
+        var minds = _entMan.System<SharedMindSystem>();
+        var hands = _entMan.System<SharedHandsSystem>();
+        var godmode = _entMan.System<SharedGodmodeSystem>();
+        var interaction = _entMan.System<SharedInteractionSystem>();
+        var access = _entMan.System<AccessReaderSystem>();
+
+        EntityUid free = default, locked = default, accessPoint = default, runner = default, deck = default;
+        EntityUid rival = default, rivalDeck = default;
+        await server.WaitAssertion(() =>
+        {
+            mapSys.CreateMap(out var mapId);
+            _grid = mapSys.CreateGridEntity(mapId);
+            for (var x = 0; x < 6; x++)
+            {
+                for (var y = 0; y < 3; y++)
+                {
+                    mapSys.SetTile(_grid, new Vector2i(x, y), new Tile(1));
+                }
+
+                Place("CableData", x, 0);
+            }
+
+            free = Place("ComputerProgrammable", 0, 0);
+            locked = Place("ComputerProgrammable", 5, 0);
+            accessPoint = Place("AccessPoint", 3, 0);
+            var router = Place("NetworkRouter", 1, 1);
+            foreach (var ent in new[] { free, locked, accessPoint, router })
+            {
+                power.SetNeedsPower(ent, false);
+            }
+
+            var reader = _entMan.EnsureComponent<AccessReaderComponent>(locked);
+            access.TryAddAccess((locked, reader), "Captain");
+
+            (runner, deck) = Runner(minds, hands, godmode, 3, 1);
+            (rival, rivalDeck) = Runner(minds, hands, godmode, 4, 1);
+        });
+
+        await Pair.RunTicksSync(30);
+
+        EntityUid avatar = default, rivalAvatar = default;
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(cyberspace.TryJackIn(runner, deck, accessPoint, true));
+            Assert.That(cyberspace.TryJackIn(rival, rivalDeck, accessPoint, true));
+            Assert.That(cyberspace.IsJackedIn(runner, out var a));
+            Assert.That(cyberspace.IsJackedIn(rival, out var r));
+            avatar = a!.Value;
+            rivalAvatar = r!.Value;
+
+            var disk = _entMan.GetComponent<WasmMachineComponent>(avatar).Vm!.Disk;
+            Assert.That(disk.Read("examples/hello.wire"), Is.Not.Null, "the deck has the computer's examples");
+            Assert.That(disk.Read("readme.txt"), Is.Not.Null);
+        });
+
+        await Pair.RunTicksSync(10);
+        await server.WaitAssertion(() =>
+        {
+            var at = (avatar, _entMan.GetComponent<WasmMachineComponent>(avatar));
+            machines.TypeLine(at, "hold blade");
+            machines.TypeLine(at, "write note.txt hello");
+            machines.TypeLine(at, "push " + MachineIo.FormatAddress(machines.AddressOf(locked)!.Value) + " note.txt");
+        });
+
+        await Pair.RunTicksSync(10);
+        await server.WaitAssertion(() =>
+        {
+            var screen = _entMan.GetComponent<WasmMachineComponent>(avatar).Screen;
+            Assert.That(screen, Does.Contain("[hold: blade is in your hand]"));
+            Assert.That(screen, Does.Contain("[push: refused, its card reader wants its owner's card]"));
+            Assert.That(hands.EnumerateHeld(avatar).Any(e =>
+                _entMan.TryGetComponent<CyberProgramComponent>(e, out var program) && program.File == "blade"));
+
+            Stand(avatar, cyberspace.NodeOf(free)!.Value);
+            machines.TypeLine((avatar, _entMan.GetComponent<WasmMachineComponent>(avatar)), "push note.txt");
+        });
+
+        await Pair.RunTicksSync(10);
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(_entMan.GetComponent<WasmMachineComponent>(avatar).Screen, Does.Contain("[push: note.txt copied]"));
+            var disk = _entMan.GetComponent<WasmMachineComponent>(free).Vm!.Disk;
+            Assert.That(disk.Read("note.txt"), Is.Not.Null);
+
+            // The rival steps up beside them, and they go for the rival with the blade.
+            Stand(rivalAvatar, cyberspace.NodeOf(free)!.Value);
+            var blade = hands.EnumerateHeld(avatar).First(e => _entMan.HasComponent<CyberProgramComponent>(e));
+            interaction.InteractDoAfter(avatar, blade, rivalAvatar,
+                _entMan.GetComponent<TransformComponent>(rivalAvatar).Coordinates, true);
+        });
+
+        await Pair.RunTicksSync(150);
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(cyberspace.IsJackedIn(rival, out _), Is.False, "cut out of cyberspace");
+            Assert.That(cyberspace.TryJackIn(rival, rivalDeck, accessPoint, true), Is.False, "dumpshock");
+            Assert.That(cyberspace.IsJackedIn(runner, out _), "the striker stays");
+            Assert.That(_entMan.GetComponent<WasmMachineComponent>(avatar).Screen, Does.Contain("blade: going for"));
+
+            cyberspace.JackOut(runner, "", false);
         });
     }
 

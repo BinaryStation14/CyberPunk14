@@ -84,7 +84,16 @@ public sealed partial class WasmMachineSystem : EntitySystem
     private void OnMapInit(Entity<WasmMachineComponent> ent, ref MapInitEvent args)
     {
         var vm = new Vm(ent.Comp.Kind);
+        var files = new Dictionary<string, string>();
+        if (ent.Comp.FilesFrom is { } from && ProtoMan.Index(from).TryComp<WasmMachineComponent>(out var other, Factory))
+            files = new Dictionary<string, string>(other.Files);
+
         foreach (var (name, text) in ent.Comp.Files)
+        {
+            files[name] = text;
+        }
+
+        foreach (var (name, text) in files)
         {
             var error = vm.SeedFile(name, Encoding.UTF8.GetBytes(text));
             if (error != DiskError.None)
@@ -177,6 +186,39 @@ public sealed partial class WasmMachineSystem : EntitySystem
         return ent.Comp.Vm?.SeedFile(name, data) ?? DiskError.Full;
     }
 
+    /// <summary>
+    /// Sets what a deck's programs see of cyberspace; null while it isn't there.
+    /// </summary>
+    public void SetDeckView(Entity<WasmMachineComponent?> ent, DeckView? view)
+    {
+        if (Resolve(ent, ref ent.Comp, false) && ent.Comp.Vm is { } vm)
+            vm.DeckView = view;
+    }
+
+    /// <summary>
+    /// Starts a program at a machine's shell, as <c>run</c> would.
+    /// </summary>
+    /// <returns>Why it couldn't, or null.</returns>
+    public string? Launch(Entity<WasmMachineComponent?> ent, string file, string args)
+    {
+        if (!Resolve(ent, ref ent.Comp, false) || ent.Comp.Vm is not { } vm)
+            return "the machine isn't running";
+
+        return vm.Launch(_wasm.Host, file, args);
+    }
+
+    /// <summary>
+    /// Shows a line on a machine's terminal, as if its programs had printed it.
+    /// </summary>
+    public void Announce(Entity<WasmMachineComponent?> ent, string text)
+    {
+        if (!Resolve(ent, ref ent.Comp, false) || ent.Comp.Vm is not { } vm)
+            return;
+
+        vm.Announce(text);
+        CollectOutput((ent.Owner, ent.Comp));
+    }
+
     public override void Update(float frameTime)
     {
         base.Update(frameTime);
@@ -248,6 +290,12 @@ public sealed partial class WasmMachineSystem : EntitySystem
             if (vm.TakeDeckColour() is { } colour)
             {
                 var ev = new DeckColourChangedEvent(Color.FromHex(colour));
+                RaiseLocalEvent(ent, ref ev);
+            }
+
+            if (vm.TakeDeckOrders() is { } orders)
+            {
+                var ev = new DeckOrdersEvent(orders);
                 RaiseLocalEvent(ent, ref ev);
             }
 
@@ -354,6 +402,13 @@ public sealed partial class WasmMachineSystem : EntitySystem
             args.Actor);
     }
 }
+
+/// <summary>
+/// Raised on a deck when its programs ask something of cyberspace: to strike, to ward, to hold a program or to
+/// push a file.
+/// </summary>
+[ByRefEvent]
+public readonly record struct DeckOrdersEvent(DeckOrders Orders);
 
 /// <summary>
 /// Raised on a deck when a program on it sets the colour its runner's virtual body shows in.

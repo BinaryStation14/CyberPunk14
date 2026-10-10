@@ -511,6 +511,30 @@ public sealed class Vm : IDisposable
     }
 
     /// <summary>
+    /// The deck as it stands in cyberspace, for its programs to see; null while it isn't in cyberspace.
+    /// </summary>
+    public DeckView? DeckView
+    {
+        set => _io.DeckView = value;
+    }
+
+    /// <summary>
+    /// What the deck's programs asked of cyberspace since the last call, if anything.
+    /// </summary>
+    public DeckOrders? TakeDeckOrders()
+    {
+        if (_io.DeckStrike == null && !_io.DeckWard && _io.DeckHold == null && _io.DeckPush == null)
+            return null;
+
+        var orders = new DeckOrders(_io.DeckStrike, _io.DeckWard, _io.DeckHold, _io.DeckPush);
+        _io.DeckStrike = null;
+        _io.DeckWard = false;
+        _io.DeckHold = null;
+        _io.DeckPush = null;
+        return orders;
+    }
+
+    /// <summary>
     /// Hands the machine a packet. False (and dropped) if it isn't running or its inbox is full.
     /// </summary>
     public bool Deliver(Packet packet)

@@ -196,7 +196,7 @@ public static class Kernel
         new("man", "(param $topic i32 $len i32 $buf i32 $cap i32) (result i32)", KernelScope.Any, 2,
             "Copies a manual page into buf (an empty topic lists them); returns its full length, or -1 for no such page."),
         new("scaffold", "(param $kind i32 $len i32 $buf i32 $cap i32) (result i32)", KernelScope.Any, 2,
-            "Copies a starting Wire program for a kind of machine (computer, door, camera, ice, deck or implant), or the operating system's own source for os, into buf; returns its full length, or -1."),
+            "Copies a starting Wire program for a kind of machine (computer, door, camera, ice, deck or implant), or the source of the operating system (os) or a program that comes with it (nano, blade, ward), into buf; returns its full length, or -1."),
         new("wire_program", "(param $buf i32 $cap i32) (result i32)", KernelScope.Any, 2,
             "Kept for programs built for the old Wire runtime; always -1, since Wire now builds straight to programs."),
         new("device_io", "(param $port i32 $buf i32 $len i32) (result i32)", KernelScope.Any, 0,
@@ -280,7 +280,7 @@ public static class Kernel
         new("deck_targets", "(param $buf i32 $cap i32) (result i32)", KernelScope.Deck, 4,
             "Copies what the deck can see (along a clear path, within 9 tiles) into buf, nearest first, one per line: id, kind (ice or runner), integrity, in reach (1 if close enough to strike), distance in tiles and name, separated by spaces. Returns the full length."),
         new("deck_strike", "(param $target i32) (result i32)", KernelScope.Deck, 4,
-            "Strikes ICE or a runner in reach, by id, for a fifth of its integrity; at none left ICE derezzes (its program halts) and a runner is thrown out. Once every 0.8 seconds. 0 struck, -1 not in reach, -2 not ready yet."),
+            "Strikes ICE or a runner in reach, by id, for a quarter of its integrity (an eighth through a ward); at none left ICE derezzes (its program halts) and a runner is thrown out. Once every two-thirds of a second. 0 struck, -1 not in reach, -2 not ready yet."),
         new("deck_ward", "(result i32)", KernelScope.Deck, 4,
             "Raises a ward: strikes on the runner are halved for 2 seconds. Every 6 seconds at most. 0 raised, -2 not ready yet."),
         new("deck_hold", "(param $name i32 $len i32) (result i32)", KernelScope.Deck, 4,
@@ -419,8 +419,8 @@ public static class Kernel
           rm FILE                    delete a file
           nano FILE                  edit a text file (Ctrl+G in it for help)
           new NAME [KIND]            start a Wire program, NAME.wire, for a computer
-                                     (or a door, camera, ice, deck or implant; os
-                                     or nano for their own source)
+                                     (or a door, camera, ice, deck or implant; os,
+                                     nano, blade or ward for their own source)
           build FILE.wire [OUT.bin]  build a program (man wire)
           run FILE [ARGS...]         run a program
           run FILE [ARGS...] &       run it as a background job: it runs alongside

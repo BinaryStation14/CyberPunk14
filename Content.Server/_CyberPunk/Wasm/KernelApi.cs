@@ -20,8 +20,8 @@ namespace Content.Server._CyberPunk.Wasm;
 /// touches the world (sending packets, moving doors, flashing a device) is queued there, for the world to
 /// carry out after the machine's tick.
 ///
-/// ICE, decks and the body (the <c>ice_</c>, <c>deck_</c> and <c>body_</c> functions) arrive with cyberspace
-/// and cyberware. Until then they're linked, so programs that use them still load, and return -1.
+/// ICE and the body (the <c>ice_</c> and <c>body_</c> functions) arrive with ICE and cyberware. Until then
+/// they're linked, so programs that use them still load, and return -1.
 /// </remarks>
 internal sealed class KernelApi
 {
@@ -56,6 +56,7 @@ internal sealed class KernelApi
         api.DefineTools();
         api.DefineDevices();
         api.DefineJobs();
+        api.DefineDeck();
         api.DefineLater();
         return api._linked;
     }
@@ -822,7 +823,107 @@ internal sealed class KernelApi
     }
 
     /// <summary>
-    /// ICE, decks and the body, which arrive with cyberspace and cyberware. Linked now so programs that use
+    /// A deck's view of cyberspace, and what it asks of it. Every function returns -1 on anything but a deck in
+    /// cyberspace.
+    /// </summary>
+    private void DefineDeck()
+    {
+        Def("deck_integrity", c => Io(c).DeckView?.Integrity ?? -1);
+
+        Def("deck_status", c => Io(c).DeckView is { } view
+            ? (view.Warded ? 1 : 0) + (view.StrikeReady ? 2 : 0) + (view.WardReady ? 4 : 0)
+            : -1);
+
+        Def("deck_targets", (c, buf, cap) =>
+        {
+            if (Io(c).DeckView is not { } view)
+                return -1;
+
+            var text = new StringBuilder();
+            foreach (var t in view.Targets)
+            {
+                text.Append($"{t.Id} {(t.Ice ? "ice" : "runner")} {t.Integrity} {(t.InReach ? 1 : 0)} {t.Distance} {t.Name}\n");
+            }
+
+            return WriteText(c, buf, cap, text.ToString());
+        });
+
+        Def("deck_strike", (c, target) =>
+        {
+            var io = Io(c);
+            if (io.DeckView is not { } view)
+                return -1;
+
+            if (!view.StrikeReady)
+                return -2;
+
+            if (!view.Targets.Any(t => t.Id == target && t.InReach))
+                return -1;
+
+            io.DeckStrike = target;
+            return 0;
+        });
+
+        Def("deck_ward", c =>
+        {
+            var io = Io(c);
+            if (io.DeckView is not { } view)
+                return -1;
+
+            if (!view.WardReady)
+                return -2;
+
+            io.DeckWard = true;
+            return 0;
+        });
+
+        Def("deck_hold", (c, name, len) =>
+        {
+            var io = Io(c);
+            if (io.DeckView == null)
+                return -1;
+
+            var file = ReadName(c, name, len);
+            var data = io.Disk.Read(file);
+            if (data == null ? !io.Host.IsSystemProgram(file) : !IsProgram(data))
+                return -2;
+
+            io.DeckHold = file;
+            return 0;
+        });
+
+        Def("deck_push", (c, addr, name, len) =>
+        {
+            var io = Io(c);
+            if (io.DeckView == null)
+                return -1;
+
+            var file = ReadName(c, name, len);
+            if (io.Disk.Read(file) is not { } data)
+                return -2;
+
+            var to = (uint) addr;
+            io.DeckPush = new DeckPush(to, io.Reachable?.Contains(to) == true, file, data);
+            return 0;
+        });
+
+        Def("deck_colour", (c, hex, len) =>
+        {
+            var io = Io(c);
+            if (!io.Is(DeviceKind.Deck) || (uint) len > 7)
+                return -1;
+
+            var text = ReadText(c, hex, len).TrimStart('#');
+            if (text.Length != 6 || !Color.TryFromHex("#" + text, out _))
+                return -1;
+
+            io.DeckColour = "#" + text;
+            return 0;
+        });
+    }
+
+    /// <summary>
+    /// ICE and the body, which arrive with ICE and cyberware. Linked now so programs that use
     /// them load; each returns -1 (or does nothing) until then, as on a machine they don't work on.
     /// </summary>
     private void DefineLater()
@@ -840,28 +941,6 @@ internal sealed class KernelApi
         Def("ice_alert", (_, _, _) => -1);
         Def("ice_go_to", (_, _, _) => -1);
         Def("ice_mode", (_, _) => -1);
-
-        Def("deck_integrity", _ => -1);
-        Def("deck_status", _ => -1);
-        Def("deck_targets", (_, _, _) => -1);
-        Def("deck_strike", (_, _) => -1);
-        Def("deck_ward", _ => -1);
-        Def("deck_hold", (_, _, _) => -1);
-        Def("deck_push", (_, _, _, _) => -1);
-
-        Def("deck_colour", (c, hex, len) =>
-        {
-            var io = Io(c);
-            if (!io.Is(DeviceKind.Deck) || (uint) len > 7)
-                return -1;
-
-            var text = ReadText(c, hex, len).TrimStart('#');
-            if (text.Length != 6 || !Color.TryFromHex("#" + text, out _))
-                return -1;
-
-            io.DeckColour = "#" + text;
-            return 0;
-        });
 
         Def("body_vitals", (_, _, _) => -1);
         Def("body_alert", (_, _, _) => -1);

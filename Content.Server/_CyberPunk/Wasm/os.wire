@@ -214,7 +214,7 @@ def rm(name):
 def new(rest):
     words = rest.split()
     if len(words) == 0 or len(words) > 2:
-        say("usage: new NAME [computer|door|camera|ice|deck|implant|os|nano]\n")
+        say("usage: new NAME [computer|door|camera|ice|deck|implant|os|nano|blade|ward]\n")
         return
     kind = "computer"
     if len(words) == 2:
@@ -227,7 +227,7 @@ def new(rest):
         return
     text = sys.scaffold(kind)
     if text == None:
-        say("new: no program for " + kind + " (computer, door, camera, ice, deck, implant, os or nano)\n")
+        say("new: no program for " + kind + " (computer, door, camera, ice, deck, implant, os, nano, blade or ward)\n")
         return
     if not fs.write(file, text):
         say("new: " + file + ": " + sys.error() + "\n")
@@ -248,7 +248,7 @@ def new(rest):
     say("  build " + file + "   build it into " + program + "\n")
     if kind == "door" or kind == "camera":
         say("  flash ADDR " + program + "   (man flash)\n")
-    elif kind == "deck":
+    elif kind == "deck" or kind == "blade" or kind == "ward":
         say("  hold " + program + "   (man deck)\n")
     else:
         say("  run " + program + "\n")
