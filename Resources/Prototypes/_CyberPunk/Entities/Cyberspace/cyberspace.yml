@@ -114,7 +114,7 @@
 
 # A runner's virtual body: their mind walks it while their real body stays behind. It's a computer, their deck.
 # It takes the shape of their body, without the insides: it doesn't breathe, eat or feel the cold, and it bleeds
-# ghostlight.
+# ghostlight. It shows, with all it wears and holds, in a glitching shade of its runner's colour.
 - type: entity
   parent: [ BaseSpeciesMob, MobBloodstream ]
   id: CyberAvatar
@@ -167,20 +167,13 @@
       enum.StrippingUiKey.Key:
         type: StrippableBoundUserInterface
 
-# What a runner's virtual body takes from them, besides the look of their body. It wears copies of their clothes,
-# but nothing that could work as a weapon or a radio, and none of what they carry.
+# What a runner's virtual body takes from them, besides the look of their body.
 - type: cloningSettings
   id: CyberAvatar
-  copyEquipment: [ head, eyes, mask, neck, innerclothing, outerclothing, gloves, feet, back ]
+  copyEquipment: null
   copyInternalStorage: false
   copyImplants: false
   copyStatusEffects: false
-  equipmentBlacklist:
-    components:
-    - AttachedClothing
-    - Gun
-    - Implanter
-    - VirtualItem
   components:
   - DetailExaminable
   - ScaleVisuals
@@ -190,6 +183,63 @@
   - Hands
   - Inventory
   - EyeBlinking
+
+# What every runner's virtual body wears. It's part of them, so none of it comes off.
+- type: startingGear
+  id: CyberAvatar
+  equipment:
+    jumpsuit: ClothingUniformCyberAvatar
+    shoes: ClothingShoesCyberAvatar
+    id: CyberProxyIdCard
+
+- type: entity
+  parent: UnsensoredClothingUniformBase
+  id: ClothingUniformCyberAvatar
+  name: runner's skin
+  description: The shape a mind takes on the network.
+  categories: [ HideSpawnMenu ]
+  components:
+  - type: Sprite
+    sprite: Clothing/Uniforms/Jumpsuits/Special/ninja.rsi
+  - type: Clothing
+    sprite: Clothing/Uniforms/Jumpsuits/Special/ninja.rsi
+  - type: Unremoveable
+
+- type: entity
+  parent: ClothingShoesBase
+  id: ClothingShoesCyberAvatar
+  name: runner's treads
+  description: Soles for walking the paths of cyberspace.
+  categories: [ HideSpawnMenu ]
+  components:
+  - type: Sprite
+    sprite: Clothing/Shoes/Specific/spaceninja.rsi
+  - type: Clothing
+    sprite: Clothing/Shoes/Specific/spaceninja.rsi
+  - type: Unremoveable
+
+- type: entity
+  parent: BaseItem
+  id: CyberProxyIdCard
+  name: proxy ID
+  description: A runner's ID as cyberspace sees it. It opens whatever the ID their body wears opens.
+  categories: [ HideSpawnMenu ]
+  components:
+  - type: Sprite
+    sprite: Objects/Misc/id_cards.rsi
+    state: ninja
+  - type: Clothing
+    slots:
+    - idcard
+    sprite: Objects/Misc/id_cards.rsi
+  - type: Item
+    size: Small
+    heldPrefix: default
+  - type: Unremoveable
+  - type: IdCard
+    nameLocId: cyberspace-proxy-id-name
+    fullNameLocId: cyberspace-proxy-id-full-name
+  - type: CyberProxyId
 
 # The computer of a practice grid, on nobody's network but the grid's.
 - type: entity

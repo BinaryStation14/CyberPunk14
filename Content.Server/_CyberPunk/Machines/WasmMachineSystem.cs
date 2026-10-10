@@ -245,6 +245,12 @@ public sealed partial class WasmMachineSystem : EntitySystem
                 _networkDirty = true;
             }
 
+            if (vm.TakeDeckColour() is { } colour)
+            {
+                var ev = new DeckColourChangedEvent(Color.FromHex(colour));
+                RaiseLocalEvent(ent, ref ev);
+            }
+
             // Nothing is wired to a device yet.
             vm.TakeDeviceCommands();
             vm.TakeFlash();
@@ -331,3 +337,9 @@ public sealed partial class WasmMachineSystem : EntitySystem
         }
     }
 }
+
+/// <summary>
+/// Raised on a deck when a program on it sets the colour its runner's virtual body shows in.
+/// </summary>
+[ByRefEvent]
+public readonly record struct DeckColourChangedEvent(Color Colour);

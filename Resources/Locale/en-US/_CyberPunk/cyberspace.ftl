@@ -21,6 +21,7 @@ cyberspace-jack-in-remote = Your deck reaches into {THE($device)} through the ai
 cyberspace-jack-in-remote-others = {CAPITALIZE(THE($user))} points a cyberdeck at {THE($device)} and goes still.
 cyberspace-jack-in-practice = You jack into your deck's practice grid. The room falls away into light.
 cyberspace-jack-in-practice-others = {CAPITALIZE(THE($user))} jacks into a cyberdeck and goes still.
+cyberspace-examined-jacked-in = [color=lightblue]{ CAPITALIZE(SUBJECT($ent)) } { CONJUGATE-HAVE($ent) } a far-off, unblinking stare. { CAPITALIZE(POSS-ADJ($ent)) } mind is somewhere in cyberspace.[/color]
 
 cyberspace-jack-out = You jack out. The world comes back.
 cyberspace-lost-connection = You lose the connection.
@@ -38,3 +39,8 @@ cyberspace-breached = You breach {THE($node)}.
 species-name-cyber-avatar = Avatar
 reagent-name-ghostlight = ghostlight
 reagent-desc-ghostlight = What a virtual body bleeds: a runner's signal, leaking out of them as glowing light.
+
+cyberspace-proxy-id-reflects = It shows {THE($id)}, worn by its runner's body.
+cyberspace-proxy-id-blank = It's blank: its runner's body wears no ID.
+cyberspace-proxy-id-name = proxy ID{$jobSuffix}
+cyberspace-proxy-id-full-name = {$fullName}'s proxy ID{$jobSuffix}

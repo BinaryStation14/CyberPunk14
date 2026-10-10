@@ -1,0 +1,34 @@
+// A runner's virtual body: see-through, greyscale, tinted their colour, with faint scanlines and, every so
+// often, a burst of rows slipping sideways.
+// Post shaders read and write premultiplied alpha.
+
+uniform highp vec3 tint;
+uniform highp float seed;
+
+const highp float bands = 24.0;
+const highp float burstsPerSecond = 8.0;
+const highp float burstChance = 0.12;
+const highp float maxSlip = 0.04;
+const highp float opacity = 0.7;
+
+void fragment() {
+    highp float slot = floor(TIME * burstsPerSecond);
+    highp float band = floor(UV.y * bands);
+
+    highp float burst = step(1.0 - burstChance, zRandom(vec2(slot, seed)).x * 0.5 + 0.5);
+    highp vec2 roll = zRandom(vec2(band + seed, slot));
+    highp float slip = burst * step(0.4, abs(roll.x)) * roll.y * maxSlip;
+
+    highp vec4 sprite = zTexture(UV + vec2(slip, 0.0));
+    if (sprite.a <= 0.0) {
+        discard;
+    }
+
+    highp float grey = zGrayscale(sprite.rgb / sprite.a);
+
+    highp float scanline = mix(0.85, 1.0, step(0.5, fract(UV.y * bands * 2.0)));
+    highp float flash = 1.0 + burst * 0.25;
+
+    highp float alpha = sprite.a * opacity;
+    COLOR = vec4(clamp(tint * (0.25 + grey * 1.1) * scanline * flash, 0.0, 1.0) * alpha, alpha);
+}

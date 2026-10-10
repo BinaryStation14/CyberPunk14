@@ -75,6 +75,7 @@ public sealed partial class CyberspaceSystem
         SubscribeLocalEvent<CyberAvatarComponent, CyberOpenDeckActionEvent>(OnOpenDeckAction);
         SubscribeLocalEvent<CyberAvatarComponent, MindUnvisitedMessage>(OnAvatarUnvisited);
         SubscribeLocalEvent<CyberAvatarComponent, MobStateChangedEvent>(OnAvatarMobStateChanged);
+        SubscribeLocalEvent<NetrunnerComponent, ExaminedEvent>(OnRunnerExamined);
     }
 
     private void OnDeckAfterInteract(Entity<CyberdeckComponent> ent, ref AfterInteractEvent args)
@@ -275,6 +276,8 @@ public sealed partial class CyberspaceSystem
         var avatar = Spawn(AvatarPrototype, new EntityCoordinates(_mapUid!.Value, 0.5f, 0.5f));
         _meta.SetEntityName(avatar, Name(runner));
         TakeShape(avatar, runner);
+        // Its mind only visits, so it would always read as catatonic.
+        RemComp<MindExaminableComponent>(avatar);
         var comp = EnsureComp<CyberAvatarComponent>(avatar);
         comp.Body = runner;
         _actions.AddAction(avatar, ref comp.JackOutAction, JackOutAction);
@@ -376,6 +379,12 @@ public sealed partial class CyberspaceSystem
             _stamina.TakeStaminaDamage(ent.Comp.Body, stamina.CritThreshold, stamina, ignoreResist: true);
     }
 
+    private void OnRunnerExamined(Entity<NetrunnerComponent> ent, ref ExaminedEvent args)
+    {
+        if (ent.Comp.JackedIn != null && args.IsInDetailsRange)
+            args.PushMarkup(Loc.GetString("cyberspace-examined-jacked-in", ("ent", ent.Owner)));
+    }
+
     /// <summary>
     /// Keeps every runner connected, or throws them out.
     /// </summary>
@@ -439,6 +448,7 @@ public sealed partial class CyberspaceSystem
     {
         base.Update(frameTime);
         TendRunners();
+        MirrorIds();
         TendRemoteUis();
     }
 }
