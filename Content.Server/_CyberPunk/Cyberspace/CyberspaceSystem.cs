@@ -119,6 +119,7 @@ public sealed partial class CyberspaceSystem : EntitySystem
         base.Initialize();
         SubscribeLocalEvent<MachineNetworksRebuiltEvent>(OnNetworksRebuilt);
         SubscribeLocalEvent<RoundRestartCleanupEvent>(OnRoundRestart);
+        InitializeAvatars();
         InitializeRunners();
         InitializeNodes();
     }

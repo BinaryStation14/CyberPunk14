@@ -420,6 +420,7 @@ public sealed partial class CyberspaceSystem
     {
         base.Update(frameTime);
         TendRunners();
+        MirrorIds();
         TendRemoteUis();
     }
 }

@@ -12,9 +12,9 @@ using Robust.Shared.Player;
 namespace Content.Server._CyberPunk.Cyberspace;
 
 /// <summary>
-/// Using a node in cyberspace opens its machine's UI, as if the runner stood at the machine. A runner carries
-/// their real body's access; a machine whose access they lack opens once they've stood at its node for
-/// <see cref="BreachTime"/>. The UI closes when they walk <see cref="NodeReach"/> from the node or jack out.
+/// Using a node in cyberspace opens its machine's UI, as if the runner stood at the machine. A runner wears a
+/// proxy of the ID their real body wears; a machine whose access they lack, or another runner's deck, opens once
+/// they've stood at its node for <see cref="BreachTime"/>. The UI closes when they walk <see cref="NodeReach"/> from the node or jack out.
 /// </summary>
 /// <remarks>
 /// The engine closes any UI whose user is on another map than its machine, unless the UI has no range. So while
@@ -57,7 +57,6 @@ public sealed partial class CyberspaceSystem
     {
         SubscribeLocalEvent<CyberNodeComponent, ActivateInWorldEvent>(OnNodeActivate);
         SubscribeLocalEvent<CyberAvatarComponent, CyberBreachDoAfterEvent>(OnBreached);
-        SubscribeLocalEvent<CyberAvatarComponent, GetAdditionalAccessEvent>(OnAvatarAccess);
         SubscribeLocalEvent<BoundUserInterfaceMessageAttempt>(OnRemoteUiMessageAttempt);
     }
 
@@ -84,11 +83,6 @@ public sealed partial class CyberspaceSystem
         UseNode(ent, (args.Target.Value, node));
     }
 
-    private void OnAvatarAccess(Entity<CyberAvatarComponent> ent, ref GetAdditionalAccessEvent args)
-    {
-        args.Entities.Add(ent.Comp.Body);
-    }
-
     /// <summary>
     /// Opens the UI of a node's machine for a runner, or starts breaching it. Tells them why not.
     /// </summary>
@@ -100,8 +94,7 @@ public sealed partial class CyberspaceSystem
             return;
         }
 
-        if (node.Comp.Kind == CyberNodeKind.Deck
-            || node.Comp.Machine is not { } machine
+        if (node.Comp.Machine is not { } machine
             || TerminatingOrDeleted(machine)
             || UiKeyOf(machine) is not { } key)
         {
@@ -115,9 +108,11 @@ public sealed partial class CyberspaceSystem
             return;
         }
 
-        if (!avatar.Comp.Breached.Contains(machine)
-            && TryComp<AccessReaderComponent>(machine, out var reader)
-            && !_access.IsAllowed(avatar, machine, reader))
+        // Another runner's deck is nobody else's to open.
+        var locked = node.Comp.Kind == CyberNodeKind.Deck
+                     || TryComp<AccessReaderComponent>(machine, out var reader) && !_access.IsAllowed(avatar, machine, reader);
+
+        if (locked && !avatar.Comp.Breached.Contains(machine))
         {
             var doAfter = new DoAfterArgs(EntityManager, avatar, BreachTime, new CyberBreachDoAfterEvent(), avatar,
                 target: node.Owner)

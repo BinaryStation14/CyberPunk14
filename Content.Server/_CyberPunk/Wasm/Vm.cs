@@ -495,6 +495,16 @@ public sealed class Vm : IDisposable
     }
 
     /// <summary>
+    /// The colour, as #RRGGBB, a program asked the deck to show in since the last call, if any.
+    /// </summary>
+    public string? TakeDeckColour()
+    {
+        var colour = _io.DeckColour;
+        _io.DeckColour = null;
+        return colour;
+    }
+
+    /// <summary>
     /// Hands the machine a packet. False (and dropped) if it isn't running or its inbox is full.
     /// </summary>
     public bool Deliver(Packet packet)

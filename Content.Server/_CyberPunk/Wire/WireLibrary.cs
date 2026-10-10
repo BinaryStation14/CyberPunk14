@@ -213,6 +213,8 @@ public static class WireLibrary
             "Puts a program (a file, or blade or ward) in a free hand of the runner's virtual body, ready to use. False if it isn't a program."),
         new("deck.push", "deck.push(address, file)", 2, 2, "deck",
             "Copies a file to the computer at address (one the deck reaches over the network), or with address None onto the computer whose pad the runner stands at. The runner must be allowed: it is nobody's, they carry its owner's card, or they stand at it with its lock breached. It lands under its own name, out of any folder; the result shows on the terminal. False if there's no such file."),
+        new("deck.colour", "deck.colour(hex)", 1, 1, "deck",
+            "Sets the colour the runner's virtual body shows in, as hex like \"#4de6ff\" (the # is optional). It's kept between runs. False if it isn't a colour."),
         new("body.vitals", "body.vitals()", 0, 0, "implant",
             "How the implant's owner is: .state (\"ok\", \"critical\" or \"dead\"), .damage (critical at 100, dead at 200), .brute, .burn, .oxy, .blood (percent), .bleeding, .doses (a trauma pump's) and .ready (a reflex booster can boost). None if the implant isn't fitted."),
         new("body.alert", "body.alert(text)", 1, 1, "implant",

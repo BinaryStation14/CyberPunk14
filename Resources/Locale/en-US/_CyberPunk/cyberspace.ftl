@@ -37,3 +37,8 @@ cyberspace-breached = You breach {THE($node)}.
 species-name-cyber-avatar = Avatar
 reagent-name-ghostlight = ghostlight
 reagent-desc-ghostlight = What a virtual body bleeds: a runner's signal, leaking out of them as glowing light.
+
+cyberspace-proxy-id-reflects = It shows {THE($id)}, worn by its runner's body.
+cyberspace-proxy-id-blank = It's blank: its runner's body wears no ID.
+cyberspace-proxy-id-name = proxy ID{$jobSuffix}
+cyberspace-proxy-id-full-name = {$fullName}'s proxy ID{$jobSuffix}

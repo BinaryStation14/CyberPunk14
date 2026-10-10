@@ -150,6 +150,7 @@ internal static partial class WireRuntime
   (import "sb_v8" "deck_ward" (func $deck_ward (result i32)))
   (import "sb_v8" "deck_hold" (func $deck_hold (param i32 i32) (result i32)))
   (import "sb_v8" "deck_push" (func $deck_push (param i32 i32 i32) (result i32)))
+  (import "sb_v10" "deck_colour" (func $deck_colour (param i32 i32) (result i32)))
   (import "sb_v8" "body_vitals" (func $body_vitals (type $Fill)))
   (import "sb_v8" "body_alert" (func $body_alert (param i32 i32) (result i32)))
   (import "sb_v8" "body_inject" (func $body_inject (result i32)))
@@ -2330,6 +2331,10 @@ internal static partial class WireRuntime
     (if (i32.eqz (ref.is_null (local.get $a))) (then (local.set $addr (call $addr_arg (local.get $a)))))
     (call $ok (call $deck_push (local.get $addr) (i32.const 1024)
       (i32.sub (call $put (local.get $file) (i32.const 1024)) (i32.const 1024)))))
+  (func $deck.colour (param $v eqref) (result eqref)
+    (call $only (i32.const 3) (str "deck.colour"))
+    (call $ok (call $deck_colour (i32.const 1024)
+      (i32.sub (call $put (call $text_arg (local.get $v) (str "the colour")) (i32.const 1024)) (i32.const 1024)))))
 
   ;; ---- body
 
