@@ -501,8 +501,29 @@ public sealed class CyberspaceTest : GameTest
 
         await server.WaitRunTicks(30);
 
+        // One built on cable once the network's up, and one that has cable run to it.
+        EntityUid builtOnCable = default, cabledLater = default;
         await server.WaitAssertion(() =>
         {
+            builtOnCable = Place(prototype, 5, 0);
+            cabledLater = Place(prototype, 4, 2);
+            power.SetNeedsPower(builtOnCable, false);
+            power.SetNeedsPower(cabledLater, false);
+        });
+
+        await server.WaitRunTicks(10);
+        await server.WaitAssertion(() =>
+        {
+            Place("CableData", 4, 1);
+            Place("CableData", 4, 2);
+        });
+
+        await server.WaitRunTicks(10);
+        await server.WaitAssertion(() =>
+        {
+            Assert.That(cyberspace.NodeOf(builtOnCable), Is.Not.Null, "a console built on cable has a node");
+            Assert.That(cyberspace.NodeOf(cabledLater), Is.Not.Null, "a console cabled later has a node");
+
             var node = cyberspace.NodeOf(console);
             Assert.That(node, Is.Not.Null, "the console has a node");
             Assert.That(Name(node!.Value), Does.StartWith("device 10."));
