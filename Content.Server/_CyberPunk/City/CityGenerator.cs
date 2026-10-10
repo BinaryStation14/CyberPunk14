@@ -476,13 +476,13 @@ public static class CityGenerator
         }
 
         /// <summary>The district a tile is nearest the middle of, along one axis.</summary>
-        private int Nearest(int t)
+        private int Nearest(float t)
         {
             return Math.Clamp((int) MathF.Round(DistrictPosition(t)), 0, _plan.Districts - 1);
         }
 
         /// <summary>Where a tile is in districts, with each district's middle on a whole number.</summary>
-        private static float DistrictPosition(int t)
+        private static float DistrictPosition(float t)
         {
             return (t - Avenue - DistrictSize / 2f) / Pitch;
         }
@@ -510,7 +510,7 @@ public static class CityGenerator
             {
                 for (var x = 0; x < _plan.Size; x++)
                 {
-                    var zone = _plan.Zone(Nearest(x), Nearest(y));
+                    var zone = LandZone(x, y);
                     var sea = Sea(x, y);
                     if (sea > 0.55f)
                         _plan.Set(x, y, CityFloor.Ocean);
@@ -520,6 +520,22 @@ public static class CityGenerator
                         _plan.Set(x, y, Land(zone, x, y), Scatter(zone, x, y));
                 }
             }
+        }
+
+        /// <summary>
+        /// The zone whose land a tile gets. Where it's looked up is pushed about by noise at a few scales, so the
+        /// borders between the zones wander and fray into each other instead of following the district squares.
+        /// </summary>
+        private CityZone LandZone(int x, int y)
+        {
+            float Warp(ulong salt)
+            {
+                return (Noise.At(_seed ^ salt, x / 24f, y / 24f) - 0.5f) * 48f
+                       + (Noise.At(_seed ^ salt << 8, x / 6f, y / 6f) - 0.5f) * 12f
+                       + (Noise.Hash(_seed ^ salt << 16, x, y) % 9 - 4f);
+            }
+
+            return _plan.Zone(Nearest(x + Warp(0xA11)), Nearest(y + Warp(0xB22)));
         }
 
         private CityFloor Land(CityZone zone, int x, int y)
