@@ -39,6 +39,7 @@ public sealed partial class CyberspaceSystem : EntitySystem
     [Dependency] private IRobustRandom _random = default!;
     [Dependency] private MetaDataSystem _meta = default!;
     [Dependency] private SharedMapSystem _map = default!;
+    [Dependency] private SharedPhysicsSystem _physics = default!;
     [Dependency] private SharedTransformSystem _transform = default!;
 
     /// <summary>Regions kept spare for networks built during the round.</summary>
@@ -528,7 +529,10 @@ public sealed partial class CyberspaceSystem : EntitySystem
             return;
 
         var w = layout.Size.W;
-        var changes = new List<(Vector2i, Tile)>();
+        // Tiles cleared go in before tiles laid: the explosion system's edge map counts a batch that does both at
+        // once twice over.
+        var cleared = new List<(Vector2i, Tile)>();
+        var laid = new List<(Vector2i, Tile)>();
         for (var y = 0; y < rect.H; y++)
         {
             for (var x = 0; x < rect.W; x++)
@@ -541,12 +545,14 @@ public sealed partial class CyberspaceSystem : EntitySystem
                 _tiles[i] = floor;
 
                 var tile = TileIds.TryGetValue(floor, out var id) ? new Tile(_tileDefs[id].TileId) : Tile.Empty;
-                changes.Add((new Vector2i(rect.X + x, rect.Y + y), tile));
+                (tile.IsEmpty ? cleared : laid).Add((new Vector2i(rect.X + x, rect.Y + y), tile));
             }
         }
 
-        if (changes.Count > 0)
-            _map.SetTiles(mapUid, grid, changes);
+        if (cleared.Count > 0)
+            _map.SetTiles(mapUid, grid, cleared);
+        if (laid.Count > 0)
+            _map.SetTiles(mapUid, grid, laid);
 
         // The barriers on the tiles just round it may change too.
         for (var cy = Math.Max(rect.Y - 1, 0) / Chunk; cy <= (rect.Y + rect.H) / Chunk; cy++)
@@ -607,6 +613,8 @@ public sealed partial class CyberspaceSystem : EntitySystem
             }
 
             _fixtures.FixtureUpdate(barrier);
+            // It's spawned without fixtures, so it can't collide until it has them.
+            _physics.SetCanCollide(barrier, true);
             _barriers[chunk] = barrier;
         }
 

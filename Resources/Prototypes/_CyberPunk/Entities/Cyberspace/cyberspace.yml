@@ -9,6 +9,7 @@
   components:
   - type: Physics
     bodyType: Static
+    canCollide: false
   - type: Fixtures
 
 - type: entity
