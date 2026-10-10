@@ -20,6 +20,11 @@ namespace Content.Server._CyberPunk.City;
 /// <see cref="CityBlockGenerator"/>, styled per zone. Avenues are streets wherever they touch the city, and two
 /// highways carry on through the badlands.
 /// </para>
+/// <para>
+/// Out in the badlands mountains rise towards the edge of the map, with the odd bunker dug into them. A fence
+/// runs round the city a little way in from the edge, with a checkpoint wherever a highway crosses it, and an
+/// indestructible wall closes off the edge itself.
+/// </para>
 /// </remarks>
 public static class CityGenerator
 {
@@ -34,6 +39,17 @@ public static class CityGenerator
     public const int Pitch = DistrictSize + Avenue;
 
     private const int ZoneAttempts = 100;
+
+    /// <summary>How thick the wall round the edge of the map is.</summary>
+    public const int BoundaryWidth = 2;
+
+    /// <summary>
+    /// How far in from the edge of the map the border fence runs: far enough that the wall at the edge can't be
+    /// seen from the checkpoints.
+    /// </summary>
+    public const int FenceInset = 20;
+
+    private const int Bunkers = 4;
 
     private const int ZoneCount = (int) CityZone.Solar + 1;
 
@@ -255,8 +271,12 @@ public static class CityGenerator
             }
         }
 
+        PaintBunkers(plan, rng.Fork(6));
+        PaintBorder(plan);
+
         var (cx, cy) = shape.Centre;
         plan.Spawn = (cx * Pitch + Avenue / 2, cy * Pitch + Avenue / 2);
+        DigTunnels(plan);
         return plan;
     }
 
@@ -325,9 +345,21 @@ public static class CityGenerator
         }
 
         /// <summary>
-        /// The zones a district may be before the zone pass.
+        /// The zones a district may be before the zone pass. The districts round the edge are left open, for the
+        /// border fence and the mountains.
         /// </summary>
         public CityZone[] Allowed(int x, int y)
+        {
+            var zones = Ring(x, y);
+            if (x != 0 && y != 0 && x != _districts - 1 && y != _districts - 1)
+                return zones;
+
+            var open = zones.Where(z => !IsBuiltUp(z)).ToArray();
+            return open.Length > 0 ? open : new[] { CityZone.Badlands, CityZone.Scrub };
+        }
+
+        /// <summary>The zones a district may be for how far it is from the sea and the city centre.</summary>
+        private CityZone[] Ring(int x, int y)
         {
             if ((x, y) == Centre)
                 return new[] { CityZone.Downtown };
@@ -456,6 +488,11 @@ public static class CityGenerator
     /// </summary>
     private sealed class Terrain
     {
+        /// <summary>How far in from the edge of the map the mountains start to rise.</summary>
+        private const float MountainRise = 120f;
+
+        private const float MountainHeight = 0.8f;
+
         private readonly CityPlan _plan;
         private readonly ulong _seed;
 
@@ -487,8 +524,8 @@ public static class CityGenerator
             return (t - Avenue - DistrictSize / 2f) / Pitch;
         }
 
-        /// <summary>How much sea a tile is, blended smoothly between the middles of the districts round it.</summary>
-        private float Sea(int x, int y)
+        /// <summary>A value per zone, blended smoothly between the middles of the districts round a tile.</summary>
+        private float Blend(Func<CityZone, float> value, int x, int y)
         {
             var last = _plan.Districts - 1;
             var fx = Math.Clamp(DistrictPosition(x), 0, last);
@@ -496,12 +533,33 @@ public static class CityGenerator
             var (x0, y0) = ((int) fx, (int) fy);
             var (x1, y1) = (Math.Min(x0 + 1, last), Math.Min(y0 + 1, last));
             var (tx, ty) = (fx - x0, fy - y0);
-            float At(int dx, int dy) => SeaLevel(_plan.Zone(dx, dy));
+            float At(int dx, int dy) => value(_plan.Zone(dx, dy));
             var bottom = At(x0, y0) + (At(x1, y0) - At(x0, y0)) * tx;
             var top = At(x0, y1) + (At(x1, y1) - At(x0, y1)) * tx;
-            return bottom + (top - bottom) * ty
+            return bottom + (top - bottom) * ty;
+        }
+
+        /// <summary>How much sea a tile is.</summary>
+        private float Sea(int x, int y)
+        {
+            return Blend(SeaLevel, x, y)
                    + (Noise.At(_seed, x / 30f, y / 30f) - 0.5f) * 0.7f
                    + (Noise.At(_seed ^ 0x5EA, x / 8f, y / 8f) - 0.5f) * 0.3f;
+        }
+
+        /// <summary>
+        /// Whether a tile is mountain: rough ground that rises the further it is from the city and the nearer the
+        /// edge of the map.
+        /// </summary>
+        private bool Mountain(int x, int y)
+        {
+            var edge = Math.Min(Math.Min(x, y), Math.Min(_plan.Size - 1 - x, _plan.Size - 1 - y));
+            var town = Blend(z => IsBuiltUp(z) || z == CityZone.Solar ? 1f : 0f, x, y);
+            var height = Noise.At(_seed ^ 0x3077, x / 32f, y / 32f) * 0.6f
+                         + Noise.At(_seed ^ 0x3078, x / 8f, y / 8f) * 0.25f
+                         + Math.Max(0f, 1f - edge / MountainRise) * 0.6f
+                         - town;
+            return height > MountainHeight;
         }
 
         public void Paint()
@@ -516,6 +574,8 @@ public static class CityGenerator
                         _plan.Set(x, y, CityFloor.Ocean);
                     else if (sea > 0.4f)
                         _plan.Set(x, y, CityFloor.Sand);
+                    else if (zone is CityZone.Badlands or CityZone.Scrub && sea < 0.25f && Mountain(x, y))
+                        _plan.Set(x, y, Land(zone, x, y), CityStructure.Mountain);
                     else
                         _plan.Set(x, y, Land(zone, x, y), Scatter(zone, x, y));
                 }
@@ -759,6 +819,294 @@ public static class CityGenerator
                     _ => CityStructure.None,
                 };
                 plan.Set(x, y, rng.Chance(1, 3) ? CityFloor.Plating : CityFloor.OldConcrete, structure);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Bunkers dug into the mountains, inside the fence: a room or two walled in concrete, with a door out into
+    /// the rock. <see cref="DigTunnels"/> leads a tunnel to each.
+    /// </summary>
+    private static void PaintBunkers(CityPlan plan, CyberRng rng)
+    {
+        var (low, placed) = (FenceInset + 4, 0);
+        for (var attempt = 0; attempt < 300 && placed < Bunkers; attempt++)
+        {
+            var (w, h) = (rng.Range(7, 11), rng.Range(6, 8));
+            var high = plan.Size - FenceInset - 4;
+            var (x0, y0) = (rng.Range(low, high - w), rng.Range(low, high - h));
+            var solid = true;
+            for (var y = y0 - 2; y < y0 + h + 2 && solid; y++)
+            {
+                for (var x = x0 - 2; x < x0 + w + 2 && solid; x++)
+                {
+                    solid = plan.Structure(x, y) == CityStructure.Mountain;
+                }
+            }
+
+            if (!solid)
+                continue;
+
+            var wall = rng.Chance(1, 2) ? CityStructure.WallConcrete : CityStructure.WallReinforced;
+            var floor = rng.Pick(new[] { CityFloor.Concrete, CityFloor.SteelDirty, CityFloor.Plating });
+            var split = w >= 9 ? x0 + w / 2 : -1;
+            for (var y = y0; y < y0 + h; y++)
+            {
+                for (var x = x0; x < x0 + w; x++)
+                {
+                    var edge = x == x0 || y == y0 || x == x0 + w - 1 || y == y0 + h - 1;
+                    var structure = edge || x == split ? wall : CityStructure.None;
+                    if (x == split && y == y0 + h / 2)
+                        structure = CityStructure.Door;
+
+                    plan.Set(x, y, floor, structure);
+                }
+            }
+
+            var (dx, dy) = rng.Pick(new[] { (x0 + 2, y0), (x0 + 2, y0 + h - 1), (x0, y0 + h / 2), (x0 + w - 1, y0 + h / 2) });
+            plan.SetStructure(dx, dy, CityStructure.Door);
+            placed++;
+        }
+    }
+
+    /// <summary>
+    /// The edge of the map: a fence round the city with a checkpoint wherever a highway crosses it, and beyond
+    /// that the boundary wall. The fence runs over land only, so it ends at the sea and gaps where mountains stand.
+    /// </summary>
+    private static void PaintBorder(CityPlan plan)
+    {
+        var (near, far) = (FenceInset, plan.Size - 1 - FenceInset);
+        var ring = new List<(int X, int Y)>();
+        for (var t = near; t <= far; t++)
+        {
+            ring.Add((t, near));
+            ring.Add((t, far));
+            if (t != near && t != far)
+            {
+                ring.Add((near, t));
+                ring.Add((far, t));
+            }
+        }
+
+        // Highways crossing the fence line: runs of exactly one road's lanes, as the solar farms' tracks are narrower.
+        var checkpoints = new List<(int X, int Y, bool Vertical)>();
+        const int lanes = Avenue - 4;
+        foreach (var fixedY in new[] { near, far })
+        {
+            for (var x = near; x <= far - lanes; x++)
+            {
+                if (Lanes(plan, x, fixedY, 1, 0) == lanes && plan.Floor(x - 1, fixedY) != CityFloor.Asphalt)
+                    checkpoints.Add((x + lanes / 2, fixedY, true));
+            }
+        }
+
+        foreach (var fixedX in new[] { near, far })
+        {
+            for (var y = near; y <= far - lanes; y++)
+            {
+                if (Lanes(plan, fixedX, y, 0, 1) == lanes && plan.Floor(fixedX, y - 1) != CityFloor.Asphalt)
+                    checkpoints.Add((fixedX, y + lanes / 2, false));
+            }
+        }
+
+        foreach (var (x, y) in ring)
+        {
+            if (plan.Floor(x, y) != CityFloor.Ocean && plan.Structure(x, y) != CityStructure.Mountain)
+                plan.Set(x, y, plan.Floor(x, y), CityStructure.Fence);
+        }
+
+        foreach (var (x, y, vertical) in checkpoints)
+        {
+            // Towards the middle of the map, so the booths' doors face the city.
+            var inward = (vertical ? y : x) < plan.Size / 2 ? 1 : -1;
+            PaintCheckpoint(plan, x, y, vertical, inward);
+        }
+
+        for (var y = 0; y < plan.Size; y++)
+        {
+            for (var x = 0; x < plan.Size; x++)
+            {
+                if (Math.Min(Math.Min(x, y), Math.Min(plan.Size - 1 - x, plan.Size - 1 - y)) < BoundaryWidth)
+                    plan.SetStructure(x, y, CityStructure.BoundaryWall);
+            }
+        }
+    }
+
+    /// <summary>How many tiles of asphalt run from a tile in a direction.</summary>
+    private static int Lanes(CityPlan plan, int x, int y, int dx, int dy)
+    {
+        var count = 0;
+        while (plan.Contains(x, y) && plan.Floor(x, y) == CityFloor.Asphalt)
+        {
+            count++;
+            (x, y) = (x + dx, y + dy);
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// A border checkpoint where a road crosses the fence at (<paramref name="cx"/>, <paramref name="cy"/>), the
+    /// middle of the road: a concrete apron with a guard booth either side, joined to the fence.
+    /// </summary>
+    private static void PaintCheckpoint(CityPlan plan, int cx, int cy, bool vertical, int inward)
+    {
+        // a runs along the fence, b along the road.
+        void Put(int a, int b, CityFloor? floor, CityStructure structure)
+        {
+            var (x, y) = vertical ? (cx + a, cy + b * inward) : (cx + b * inward, cy + a);
+            plan.Set(x, y, floor ?? plan.Floor(x, y), structure);
+        }
+
+        for (var b = -3; b <= 3; b++)
+        {
+            for (var a = -9; a <= 9; a++)
+            {
+                var side = Math.Abs(a);
+                if (side <= 2)
+                {
+                    Put(a, b, null, CityStructure.None);
+                    continue;
+                }
+
+                if (side <= 4 || Math.Abs(b) == 3)
+                {
+                    Put(a, b, CityFloor.Concrete, CityStructure.None);
+                    continue;
+                }
+
+                var edge = side == 5 || side == 9 || Math.Abs(b) == 2;
+                var structure = !edge ? CityStructure.None
+                    : side == 5 && Math.Abs(b) <= 1 ? CityStructure.WindowReinforced
+                    : side == 7 && b == 2 ? CityStructure.Door
+                    : CityStructure.WallReinforced;
+                Put(a, b, CityFloor.Steel, structure);
+            }
+        }
+
+        foreach (var a in new[] { -3, 3 })
+        {
+            Put(a, -3, null, CityStructure.Lamp);
+            Put(a, 3, null, CityStructure.Lamp);
+        }
+    }
+
+    private static bool Open(CityPlan plan, int i)
+    {
+        return plan.Floors[i] != CityFloor.Ocean && plan.Structures[i] is CityStructure.None or CityStructure.Door;
+    }
+
+    /// <summary>
+    /// Every door can be walked to from where people arrive: anywhere with a door that can't be reached, such as
+    /// a bunker in the mountains, gets a tunnel dug to it through the rock from the nearest place that can.
+    /// </summary>
+    private static void DigTunnels(CityPlan plan)
+    {
+        var size = plan.Size;
+        var area = new int[size * size];
+        Array.Fill(area, -1);
+        var areas = 0;
+        var withDoors = new List<bool>();
+        var stack = new Stack<int>();
+        IEnumerable<int> Neighbours(int i)
+        {
+            var (x, y) = (i % size, i / size);
+            if (x > 0)
+                yield return i - 1;
+            if (x < size - 1)
+                yield return i + 1;
+            if (y > 0)
+                yield return i - size;
+            if (y < size - 1)
+                yield return i + size;
+        }
+
+        // Label each patch of open ground.
+        for (var start = 0; start < area.Length; start++)
+        {
+            if (area[start] >= 0 || !Open(plan, start))
+                continue;
+
+            var door = false;
+            area[start] = areas;
+            stack.Push(start);
+            while (stack.TryPop(out var i))
+            {
+                door |= plan.Structures[i] == CityStructure.Door;
+                foreach (var next in Neighbours(i))
+                {
+                    if (area[next] >= 0 || !Open(plan, next))
+                        continue;
+
+                    area[next] = areas;
+                    stack.Push(next);
+                }
+            }
+
+            withDoors.Add(door);
+            areas++;
+        }
+
+        var reached = new bool[areas];
+        reached[area[plan.Spawn.Y * size + plan.Spawn.X]] = true;
+        var parent = new int[size * size];
+        var queue = new Queue<int>();
+        while (true)
+        {
+            var wanted = Enumerable.Range(0, areas).Any(a => withDoors[a] && !reached[a]);
+            if (!wanted)
+                return;
+
+            // Breadth first out from everywhere reached, through rock and open ground, to the nearest patch that
+            // has a door and isn't reached yet.
+            Array.Fill(parent, -2);
+            queue.Clear();
+            for (var i = 0; i < area.Length; i++)
+            {
+                if (area[i] >= 0 && reached[area[i]])
+                {
+                    parent[i] = -1;
+                    queue.Enqueue(i);
+                }
+            }
+
+            var found = -1;
+            while (found < 0 && queue.TryDequeue(out var i))
+            {
+                foreach (var next in Neighbours(i))
+                {
+                    if (parent[next] != -2)
+                        continue;
+
+                    var open = area[next] >= 0;
+                    if (!open && plan.Structures[next] != CityStructure.Mountain)
+                        continue;
+
+                    parent[next] = i;
+                    if (open && withDoors[area[next]] && !reached[area[next]])
+                    {
+                        found = next;
+                        break;
+                    }
+
+                    queue.Enqueue(next);
+                }
+            }
+
+            if (found < 0)
+                return;
+
+            reached[area[found]] = true;
+            for (var i = parent[found]; i >= 0; i = parent[i])
+            {
+                if (area[i] >= 0)
+                {
+                    reached[area[i]] = true;
+                    continue;
+                }
+
+                plan.Structures[i] = CityStructure.None;
+                area[i] = area[found];
             }
         }
     }

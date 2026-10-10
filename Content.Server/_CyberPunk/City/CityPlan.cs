@@ -63,6 +63,11 @@ public enum CityStructure : byte
     Rock,
     SolarPanel,
     Lamp,
+    /// <summary>Solid rock: part of a mountain.</summary>
+    Mountain,
+    /// <summary>The wall round the edge of the map that nobody gets past.</summary>
+    BoundaryWall,
+    Fence,
 }
 
 /// <summary>

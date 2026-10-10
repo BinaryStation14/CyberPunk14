@@ -17,8 +17,8 @@ namespace Content.Server._CyberPunk.City;
 
 /// <summary>
 /// The generated city: one map, made from a <see cref="CityPlan"/> the first time a player steps through a
-/// <see cref="CityPortalComponent"/>, with a gateway back by where they arrive. The sea and the edge of the map
-/// are walled off by invisible barriers.
+/// <see cref="CityPortalComponent"/>, with a gateway back by where they arrive. The sea is walled off by
+/// invisible barriers.
 /// </summary>
 public sealed partial class CitySystem : EntitySystem
 {
@@ -31,6 +31,8 @@ public sealed partial class CitySystem : EntitySystem
 
     private static readonly EntProtoId ReturnPortal = "CityReturnPortal";
     private static readonly EntProtoId Barrier = "CityBarrier";
+    private static readonly EntProtoId FenceStraight = "FenceMetalStraight";
+    private static readonly EntProtoId FenceCorner = "FenceMetalCorner";
 
     private static readonly Dictionary<CityFloor, string> TileIds = new()
     {
@@ -70,6 +72,8 @@ public sealed partial class CitySystem : EntitySystem
         [CityStructure.Rock] = "FloraRockSolid",
         [CityStructure.SolarPanel] = "SolarPanel",
         [CityStructure.Lamp] = "LightPostSmall",
+        [CityStructure.Mountain] = "WallRockSand",
+        [CityStructure.BoundaryWall] = "WallPlastitaniumIndestructible",
     };
 
     private EntityUid? _city;
@@ -165,6 +169,11 @@ public sealed partial class CitySystem : EntitySystem
                 var coords = new EntityCoordinates(mapUid, x + 0.5f, y + 0.5f);
                 if (StructureIds.TryGetValue(plan.Structure(x, y), out var structure))
                     Spawn(structure, coords);
+                else if (plan.Structure(x, y) == CityStructure.Fence)
+                {
+                    var (fence, rotation) = Fence(plan, x, y);
+                    SpawnAttachedTo(fence, coords, rotation: rotation);
+                }
 
                 if (Walled(plan, x, y))
                     Spawn(Barrier, coords);
@@ -184,13 +193,39 @@ public sealed partial class CitySystem : EntitySystem
     }
 
     /// <summary>
-    /// Whether a tile gets a barrier: sea next to anything that isn't, and the edge of the map, so nobody wades out
-    /// to sea or walks off the world.
+    /// Which piece of fence goes on a tile, turned to join up with the fence either side of it. A straight piece
+    /// runs north to south unturned, and a corner joins north and west.
+    /// </summary>
+    private static (EntProtoId, Angle) Fence(CityPlan plan, int x, int y)
+    {
+        bool Joins(int dx, int dy)
+        {
+            return plan.Contains(x + dx, y + dy) && plan.Structure(x + dx, y + dy) == CityStructure.Fence;
+        }
+
+        var (north, south, east, west) = (Joins(0, 1), Joins(0, -1), Joins(1, 0), Joins(-1, 0));
+        if ((north ^ south) && (east ^ west))
+        {
+            var turns = (north, west) switch
+            {
+                (true, true) => 0,
+                (false, true) => 1,
+                (false, false) => 2,
+                _ => 3,
+            };
+            return (FenceCorner, Angle.FromDegrees(90 * turns));
+        }
+
+        return (FenceStraight, (east || west) && !(north || south) ? Angle.FromDegrees(90) : Angle.Zero);
+    }
+
+    /// <summary>
+    /// Whether a tile gets a barrier: sea next to anything that isn't, so nobody wades out to sea.
     /// </summary>
     private static bool Walled(CityPlan plan, int x, int y)
     {
-        if (x == 0 || y == 0 || x == plan.Size - 1 || y == plan.Size - 1)
-            return true;
+        if (plan.Structure(x, y) != CityStructure.None)
+            return false;
 
         return plan.Floor(x, y) == CityFloor.Ocean
                && (plan.Floor(x - 1, y) != CityFloor.Ocean || plan.Floor(x + 1, y) != CityFloor.Ocean

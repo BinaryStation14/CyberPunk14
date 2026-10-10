@@ -34,6 +34,22 @@ public sealed class CityGenerationTest
     }
 
     /// <summary>
+    /// Mountains rise in the badlands, a fence runs round the city, and nothing gets past the wall round the edge.
+    /// </summary>
+    [Test]
+    public void FencedAndWalledIn([ValueSource(nameof(Seeds))] ulong seed)
+    {
+        var plan = CityGenerator.Generate(seed);
+        Assert.That(plan.Structures, Does.Contain(CityStructure.Mountain));
+        Assert.That(plan.Structures, Does.Contain(CityStructure.Fence));
+        var last = plan.Size - 1;
+        var edge = Enumerable.Range(0, plan.Size)
+            .SelectMany(t => new[] { (t, 0), (t, last), (0, t), (last, t) })
+            .Where(tile => plan.Structure(tile.Item1, tile.Item2) != CityStructure.BoundaryWall);
+        Assert.That(edge, Is.Empty);
+    }
+
+    /// <summary>
     /// From where people arrive, every door in the city can be walked to, so every building and every room in it
     /// can be reached.
     /// </summary>
