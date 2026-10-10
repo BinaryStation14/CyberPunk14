@@ -61,6 +61,12 @@ public sealed partial class WasmMachineComponent : Component
     public string? ShownTitle;
 
     /// <summary>
+    /// Whether its terminal echoes what's typed, as last sent to the people with it open.
+    /// </summary>
+    [ViewVariables]
+    public bool ShownEcho;
+
+    /// <summary>
     /// The machine tick it last ran in.
     /// </summary>
     [ViewVariables]

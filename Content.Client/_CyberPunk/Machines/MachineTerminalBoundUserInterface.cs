@@ -24,7 +24,7 @@ public sealed class MachineTerminalBoundUserInterface : BoundUserInterface
         base.Open();
 
         _window = this.CreateWindow<MachineTerminalWindow>();
-        _window.Screen.OnKeys += keys => SendMessage(new MachineTerminalKeysMessage(keys));
+        _window.Screen.OnKeys += (keys, sequence) => SendMessage(new MachineTerminalKeysMessage(keys, sequence));
         _window.Program.OnEvent += (id, kind, value) => SendMessage(new MachineTerminalUiEventMessage(id, kind, value));
         _window.Screen.GrabKeyboardFocus();
 
@@ -51,6 +51,12 @@ public sealed class MachineTerminalBoundUserInterface : BoundUserInterface
                 break;
             case MachineTerminalTitleMessage title:
                 _window.SetProgramTitle(title.Title);
+                break;
+            case MachineTerminalEchoMessage echo:
+                _window.Screen.SetEcho(echo.Echo);
+                break;
+            case MachineTerminalKeysHandledMessage handled:
+                _window.Screen.KeysHandled(handled.Sequence, handled.Line);
                 break;
         }
     }

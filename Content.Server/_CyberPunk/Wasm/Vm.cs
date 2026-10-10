@@ -89,6 +89,12 @@ public sealed class Vm : IDisposable
     /// <summary>Whether the terminal is in raw mode (keys go to the program one by one).</summary>
     public bool IsRaw => _io.Raw;
 
+    /// <summary>Whether keys typed at the terminal are echoed onto the line.</summary>
+    public bool Echoes => State == VmState.Running && !_io.Raw;
+
+    /// <summary>The line being typed, when the terminal isn't in raw mode.</summary>
+    public string Line => _io.Editor.Line;
+
     /// <summary>The name of the firmware a device boots, if it has some.</summary>
     public string? FirmwareName => _firmware?.Name;
 
